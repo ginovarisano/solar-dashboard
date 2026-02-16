@@ -137,7 +137,7 @@ DB_PATH = os.path.join(_APP_DIR, "solar_history.db")
 
 # --- Setup Flask + SocketIO ---
 app = Flask(__name__, template_folder=os.path.join(_BUNDLE_DIR, "templates"))
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Store the latest values so new browser connections get current data
 latest_data = {}
