@@ -40,25 +40,25 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           pyinstaller --onefile --add-data "templates:templates" --name SolarDashboard app.py
-          mv dist/SolarDashboard dist/SolarDashboard${{ matrix.suffix }}
+          cd dist && zip SolarDashboard${{ matrix.suffix }}.zip SolarDashboard
 
       # Windows uses ; as the path separator
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
           pyinstaller --onefile --add-data "templates;templates" --name SolarDashboard app.py
-          ren dist\SolarDashboard.exe SolarDashboard${{ matrix.suffix }}.exe
+          Compress-Archive -Path dist\SolarDashboard.exe -DestinationPath dist\SolarDashboard${{ matrix.suffix }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SolarDashboard${{ matrix.suffix }}
-          path: dist/
+          path: dist/*.zip
 
       # Attach to the release if triggered by a release
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/*.zip
           tag_name: ${{ github.event.release.tag_name }}
