@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Dashboard — Setup</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e27;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .setup-container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .welcome-text {
+            color: #9ca3af;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 32px;
+        }
+
+        .section {
+            background: linear-gradient(135deg, #0d1140 0%, #1a1a4e 100%);
+            border: 1px solid #f59e0b33;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .section-number {
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            color: #0a0e27;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .section-hint {
+            color: #6b7280;
+            font-size: 0.8rem;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="password"] {
+            background: #0a0e27;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: #f59e0b;
+        }
+
+        input::placeholder {
+            color: #4b5563;
+        }
+
+        .launch-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #0a0e27;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+
+        .launch-btn:hover {
+            opacity: 0.9;
+        }
+
+        .launch-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .lookup-btn {
+            background: #1a1a4e;
+            border: 1px solid #f59e0b55;
+            color: #f59e0b;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .lookup-btn:hover { background: #f59e0b22; }
+        .lookup-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .error-msg {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 12px;
+            display: none;
+        }
+
+        @media (max-width: 500px) {
+            body { padding: 20px 12px; }
+            h1 { font-size: 1.4rem; }
+            .section { padding: 16px; }
+            .form-row { flex-direction: column; gap: 10px; }
+            .form-row .form-group { max-width: 100% !important; }
+            .lookup-btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <h1>Solar Dashboard</h1>
+        <p class="welcome-text">
+            Welcome! Let's get your dashboard connected. Fill in the details below
+            and you'll be up and running in no time. You can always change these
+            later from the settings gear icon.
+        </p>
+
+        <!-- Section 1: MQTT Connection -->
+        <div class="section">
+            <div class="section-header">
+                <span class="section-number">1</span>
+                <span class="section-title">Solar Assistant Connection</span>
+            </div>
+            <p class="section-hint">
+                MQTT must be enabled in Solar Assistant first. Open the Solar Assistant
+                web UI, go to <strong>Settings &rarr; MQTT</strong>, and turn it on.
+                Set a username and password there, then enter them below.
+                The IP address is the same as your Solar Assistant device — find it in
+                your router's device list or the SA app.
+            </p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="mqtt_broker">MQTT Broker IP</label>
+                    <input type="text" id="mqtt_broker" placeholder="192.168.1.252" value="{{ settings.mqtt_broker }}">
+                </div>
+                <div class="form-group" style="max-width: 120px;">
+                    <label for="mqtt_port">Port</label>
+                    <input type="text" id="mqtt_port" value="{{ settings.mqtt_port }}">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="mqtt_user">Username (optional)</label>
+                    <input type="text" id="mqtt_user" placeholder="Leave blank if none" value="{{ settings.mqtt_user }}">
+                </div>
+                <div class="form-group">
+                    <label for="mqtt_pass">Password (optional)</label>
+                    <input type="password" id="mqtt_pass" placeholder="Leave blank if none" value="{{ settings.mqtt_pass }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Location -->
+        <div class="section">
+            <div class="section-header">
+                <span class="section-number">2</span>
+                <span class="section-title">Location</span>
+            </div>
+            <p class="section-hint">
+                Used for weather forecasts and sunrise/sunset times.
+                Enter your zip code and click "Look Up" to auto-fill everything.
+            </p>
+            <div class="form-row">
+                <div class="form-group" style="max-width: 160px;">
+                    <label for="zip_code">Zip Code</label>
+                    <input type="text" id="zip_code" placeholder="08089">
+                </div>
+                <div class="form-group" style="max-width: 120px; justify-content: flex-end;">
+                    <button type="button" class="lookup-btn" onclick="lookupZip()">Look Up</button>
+                </div>
+                <div class="form-group" style="justify-content: flex-end;">
+                    <span id="lookupStatus" style="font-size: 0.8rem; color: #6b7280;"></span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="location_name">Display Name</label>
+                    <input type="text" id="location_name" placeholder="My Town, ST" value="{{ settings.location_name }}">
+                </div>
+                <div class="form-group">
+                    <label for="timezone">Timezone</label>
+                    <input type="text" id="timezone" value="{{ settings.timezone }}" placeholder="America/New_York">
+                </div>
+            </div>
+            <details style="margin-top: 4px;">
+                <summary style="font-size: 0.75rem; color: #4b5563; cursor: pointer;">Advanced: manual coordinates</summary>
+                <div class="form-row" style="margin-top: 8px;">
+                    <div class="form-group">
+                        <label for="location_lat">Latitude</label>
+                        <input type="text" id="location_lat" placeholder="39.72317" value="{{ settings.location_lat }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="location_lon">Longitude</label>
+                        <input type="text" id="location_lon" placeholder="-74.84905" value="{{ settings.location_lon }}">
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <!-- Section 3: Electricity Rate -->
+        <div class="section">
+            <div class="section-header">
+                <span class="section-number">3</span>
+                <span class="section-title">Electricity Rate</span>
+            </div>
+            <p class="section-hint">
+                Your cost per kilowatt-hour. Check your utility bill — look for the
+                $/kWh rate. This is used to calculate money saved by your solar panels.
+            </p>
+            <div class="form-row">
+                <div class="form-group" style="max-width: 200px;">
+                    <label for="electricity_rate">Rate ($/kWh)</label>
+                    <input type="text" id="electricity_rate" placeholder="0.30" value="{{ settings.electricity_rate }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Save button -->
+        <button class="launch-btn" id="saveBtn" onclick="saveSetup()">
+            Save &amp; Launch Dashboard
+        </button>
+        <p class="error-msg" id="errorMsg"></p>
+    </div>
+
+    <script>
+        function lookupZip() {
+            var zip = document.getElementById('zip_code').value.trim();
+            var statusEl = document.getElementById('lookupStatus');
+            if (!zip) { statusEl.textContent = 'Enter a zip code'; return; }
+
+            var btn = document.querySelector('.lookup-btn');
+            btn.disabled = true;
+            statusEl.textContent = 'Looking up...';
+            statusEl.style.color = '#6b7280';
+
+            // Use Open-Meteo geocoding (free, no API key)
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(zip) + '&count=1&language=en&format=json');
+            xhr.onload = function() {
+                btn.disabled = false;
+                if (xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.results && data.results.length > 0) {
+                        var r = data.results[0];
+                        document.getElementById('location_lat').value = r.latitude;
+                        document.getElementById('location_lon').value = r.longitude;
+                        document.getElementById('timezone').value = r.timezone || 'America/New_York';
+                        // Build display name from city + state/admin1
+                        var name = r.name || '';
+                        if (r.admin1) name += ', ' + r.admin1;
+                        document.getElementById('location_name').value = name;
+                        statusEl.textContent = 'Found: ' + name;
+                        statusEl.style.color = '#22c55e';
+                    } else {
+                        statusEl.textContent = 'No results for that zip code';
+                        statusEl.style.color = '#ef4444';
+                    }
+                } else {
+                    statusEl.textContent = 'Lookup failed, try again';
+                    statusEl.style.color = '#ef4444';
+                }
+            };
+            xhr.onerror = function() {
+                btn.disabled = false;
+                statusEl.textContent = 'Network error';
+                statusEl.style.color = '#ef4444';
+            };
+            xhr.send();
+        }
+
+        function saveSetup() {
+            var btn = document.getElementById('saveBtn');
+            var errEl = document.getElementById('errorMsg');
+            errEl.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            // Gather values from the form
+            var mqttBroker = document.getElementById('mqtt_broker').value.trim();
+            if (!mqttBroker) {
+                showError('Please enter the MQTT broker IP address.');
+                return;
+            }
+
+            var settings = {
+                mqtt_broker: mqttBroker,
+                mqtt_port: document.getElementById('mqtt_port').value.trim() || '1883',
+                mqtt_user: document.getElementById('mqtt_user').value.trim(),
+                mqtt_pass: document.getElementById('mqtt_pass').value.trim(),
+                sa_host: mqttBroker,  // SA host defaults to same as MQTT IP
+                location_lat: document.getElementById('location_lat').value.trim(),
+                location_lon: document.getElementById('location_lon').value.trim(),
+                location_name: document.getElementById('location_name').value.trim(),
+                timezone: document.getElementById('timezone').value.trim() || 'America/New_York',
+                electricity_rate: document.getElementById('electricity_rate').value.trim() || '0.30'
+            };
+
+            // Send to server
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/setup/complete');
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    btn.textContent = 'Launching...';
+                    window.location.href = '/';
+                } else {
+                    showError('Failed to save settings. Please try again.');
+                }
+            };
+            xhr.onerror = function() {
+                showError('Could not connect to the server. Is it running?');
+            };
+            xhr.send(JSON.stringify(settings));
+        }
+
+        function showError(msg) {
+            var btn = document.getElementById('saveBtn');
+            var errEl = document.getElementById('errorMsg');
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Save & Launch Dashboard';
+        }
+
+    </script>
+</body>
+</html>

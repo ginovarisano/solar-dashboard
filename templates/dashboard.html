@@ -1,0 +1,3444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e27;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        /* --- Header bar --- */
+        .header {
+            background: linear-gradient(135deg, #0d1140 0%, #1a1a4e 100%);
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid #f59e0b33;
+            font-size: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-right: 8px;
+        }
+
+        .header-mode {
+            color: #22c55e;
+            font-weight: 600;
+            font-size: 0.75rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            background: #22c55e15;
+            border: 1px solid #22c55e33;
+            white-space: nowrap;
+        }
+
+        .header-mode.grid-mode {
+            color: #ef4444;
+            background: #ef444415;
+            border-color: #ef444433;
+        }
+
+        .header-wx {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #6b7280;
+            font-size: 0.75rem;
+            margin-left: auto;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected { background: #22c55e; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* --- Card grid --- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 16px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: linear-gradient(145deg, #111640 0%, #0d1030 100%);
+            border-radius: 14px;
+            padding: 14px 18px;
+            border: 1px solid #ffffff10;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .card-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .wide { grid-column: span 4; }
+
+        /* --- Power Flow --- */
+        .pf-wrapper {
+            position: relative;
+            width: 100%;
+            height: 260px;
+        }
+
+        .pf-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .pf-node {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            z-index: 2;
+            transform: translateX(-50%);
+        }
+
+        .pf-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            transition: box-shadow 0.5s;
+        }
+
+        .pf-icon.solar-i {
+            background: radial-gradient(circle, #f59e0b44 0%, #f59e0b11 100%);
+            border: 2px solid #f59e0b66;
+        }
+        .pf-icon.solar-i.active { box-shadow: 0 0 24px #f59e0b66, 0 0 48px #f59e0b22; }
+
+        .pf-icon.inv-i {
+            background: radial-gradient(circle, #a78bfa44 0%, #a78bfa11 100%);
+            border: 2px solid #a78bfa66;
+        }
+        .pf-icon.inv-i.active { box-shadow: 0 0 24px #a78bfa66, 0 0 48px #a78bfa22; }
+
+        .pf-icon.bat-i {
+            background: radial-gradient(circle, #22c55e44 0%, #22c55e11 100%);
+            border: 2px solid #22c55e66;
+        }
+        .pf-icon.bat-i.active { box-shadow: 0 0 24px #22c55e66, 0 0 48px #22c55e22; }
+
+        .pf-icon.home-i {
+            background: radial-gradient(circle, #3b82f644 0%, #3b82f611 100%);
+            border: 2px solid #3b82f666;
+        }
+        .pf-icon.home-i.active { box-shadow: 0 0 24px #3b82f655, 0 0 48px #3b82f622; }
+
+        .pf-icon.grid-i {
+            background: radial-gradient(circle, #ef444444 0%, #ef444411 100%);
+            border: 2px solid #ef444466;
+        }
+        .pf-icon.grid-i.active { box-shadow: 0 0 24px #ef444455, 0 0 48px #ef444422; }
+
+        .pf-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
+        .pf-value { font-size: 1.15rem; font-weight: 700; }
+        .pf-detail { font-size: 0.7rem; color: #6b728099; text-align: center; line-height: 1.4; }
+
+        /* --- Fun facts --- */
+        .fact {
+            background: #0a0e2799;
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ffffff08;
+        }
+
+        .facts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+        }
+
+        .fact-icon { font-size: 1.4rem; margin-bottom: 4px; }
+        .fact-value { font-size: 1.2rem; font-weight: 700; color: #fbbf24; }
+        .fact-label { font-size: 0.7rem; color: #6b7280; margin-top: 2px; }
+
+        /* --- Bottom section (stats + history) --- */
+        .bottom-section {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 16px 16px;
+        }
+
+        .bottom-card {
+            background: linear-gradient(145deg, #111640 0%, #0d1030 100%);
+            border-radius: 14px;
+            padding: 20px;
+            border: 1px solid #ffffff10;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            padding: 6px 16px;
+            border: 1px solid #ffffff15;
+            background: #0a0e27;
+            color: #6b7280;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover { color: #e0e0e0; border-color: #ffffff30; }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #f59e0b33, #f59e0b11);
+            color: #f59e0b;
+            border-color: #f59e0b55;
+        }
+
+        .history-chart-container {
+            position: relative;
+            height: 250px;
+            margin-bottom: 16px;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th {
+            text-align: left;
+            padding: 8px 10px;
+            color: #6b7280;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #ffffff10;
+        }
+
+        .history-table td {
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            border-bottom: 1px solid #ffffff08;
+        }
+
+        .history-table tr:hover td { background: #ffffff05; }
+        .history-table .pv-col { color: #f59e0b; font-weight: 600; }
+        .history-table .load-col { color: #3b82f6; font-weight: 600; }
+        .history-table .grid-col { color: #ef4444; }
+        .history-table .net-col { font-weight: 600; }
+        .history-table .net-positive { color: #22c55e; }
+        .history-table .net-negative { color: #ef4444; }
+
+        .history-note {
+            text-align: center;
+            color: #4b5563;
+            font-size: 0.75rem;
+            margin-top: 12px;
+            font-style: italic;
+        }
+
+        /* --- Solar card sky background --- */
+        .sky-bg {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 14px;
+            transition: background 3s ease;
+            z-index: 0;
+            opacity: 0.8;
+        }
+
+        /* Text shadow on all solar card z-index:1 content for readability */
+        #solarCard [style*="z-index: 1"], #solarCard .card-title {
+            text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+        }
+
+        .cloud {
+            position: absolute;
+            background: #8899bb;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 2s;
+            filter: blur(2px);
+        }
+
+        .cloud::before, .cloud::after {
+            content: '';
+            position: absolute;
+            background: inherit;
+            border-radius: 50%;
+        }
+
+        .cloud-1 {
+            width: 50px; height: 18px;
+            top: 18%; left: -60px;
+            animation: drift1 35s linear infinite;
+        }
+        .cloud-1::before { width: 22px; height: 22px; top: -10px; left: 8px; }
+        .cloud-1::after { width: 16px; height: 16px; top: -6px; left: 28px; }
+
+        .cloud-2 {
+            width: 40px; height: 14px;
+            top: 35%; left: -50px;
+            animation: drift2 45s linear infinite;
+            animation-delay: 8s;
+        }
+        .cloud-2::before { width: 18px; height: 18px; top: -8px; left: 6px; }
+        .cloud-2::after { width: 14px; height: 14px; top: -5px; left: 22px; }
+
+        .cloud-3 {
+            width: 55px; height: 16px;
+            top: 55%; left: -65px;
+            animation: drift3 40s linear infinite;
+            animation-delay: 15s;
+        }
+        .cloud-3::before { width: 24px; height: 24px; top: -12px; left: 10px; }
+        .cloud-3::after { width: 18px; height: 18px; top: -7px; left: 30px; }
+
+        .cloud-4 {
+            width: 35px; height: 12px;
+            top: 25%; left: -45px;
+            animation: drift4 50s linear infinite;
+            animation-delay: 22s;
+        }
+        .cloud-4::before { width: 16px; height: 16px; top: -7px; left: 5px; }
+        .cloud-4::after { width: 12px; height: 12px; top: -4px; left: 18px; }
+
+        .cloud-5 {
+            width: 45px; height: 15px;
+            top: 65%; left: -55px;
+            animation: drift5 38s linear infinite;
+            animation-delay: 5s;
+        }
+        .cloud-5::before { width: 20px; height: 20px; top: -9px; left: 8px; }
+        .cloud-5::after { width: 15px; height: 15px; top: -5px; left: 25px; }
+
+        @keyframes drift1 { 0% { left: -60px; } 100% { left: 110%; } }
+        @keyframes drift2 { 0% { left: -50px; } 100% { left: 110%; } }
+        @keyframes drift3 { 0% { left: -65px; } 100% { left: 110%; } }
+        @keyframes drift4 { 0% { left: -45px; } 100% { left: 110%; } }
+        @keyframes drift5 { 0% { left: -55px; } 100% { left: 110%; } }
+
+        /* Stars for nighttime */
+        .star {
+            position: absolute;
+            width: 2px; height: 2px;
+            background: #fff;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 3s;
+        }
+
+        .star.twinkle { animation: twinkle 3s ease-in-out infinite; }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.9; }
+        }
+
+        /* --- NILM Appliances --- */
+        .nilm-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .nilm-panel {
+            background: #0a0e2799;
+            border-radius: 10px;
+            padding: 14px;
+            border: 1px solid #ffffff08;
+        }
+
+        .nilm-panel-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .nilm-active-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #ffffff05;
+            margin-bottom: 6px;
+            border: 1px solid #ffffff08;
+        }
+
+        .nilm-active-icon { font-size: 1.3rem; }
+
+        .nilm-active-info { flex: 1; }
+
+        .nilm-active-label { font-size: 0.85rem; font-weight: 600; }
+
+        .nilm-active-detail { font-size: 0.7rem; color: #6b7280; }
+
+        .nilm-active-power {
+            font-size: 1rem;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .nilm-event-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #ffffff06;
+            font-size: 0.8rem;
+        }
+
+        .nilm-event-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .nilm-event-time {
+            font-size: 0.7rem;
+            color: #4b5563;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .nilm-sig-item {
+            background: #0a0e2799;
+            border-radius: 10px;
+            border: 1px solid #ffffff08;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .nilm-sig-item:hover { border-color: #ffffff20; }
+
+        .nilm-sig-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+        }
+
+        .nilm-sig-icon { font-size: 1.1rem; }
+
+        .nilm-sig-label { font-size: 0.8rem; font-weight: 600; flex: 1; }
+
+        .nilm-sig-power { font-size: 0.75rem; color: #6b7280; }
+
+        .nilm-sig-status { font-size: 0.65rem; font-weight: 600; }
+
+        .nilm-sig-details {
+            display: none;
+            padding: 0 12px 10px;
+            font-size: 0.7rem;
+            color: #6b7280;
+        }
+
+        .nilm-sig-details.open { display: block; }
+
+        .nilm-sig-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            border-top: 1px solid #ffffff06;
+        }
+
+        .nilm-sig-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .nilm-sig-actions button {
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #ffffff15;
+            background: #0a0e27;
+            color: #6b7280;
+            cursor: pointer;
+            font-size: 0.65rem;
+        }
+
+        .nilm-sig-actions button:hover { color: #e0e0e0; border-color: #ffffff30; }
+
+        .nilm-sig-list { display: flex; flex-direction: column; gap: 6px; }
+
+        .nilm-sig-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nilm-sig-toolbar label {
+            font-size: 0.7rem;
+            color: #6b7280;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .nilm-sig-toolbar input[type="checkbox"] { accent-color: #f59e0b; }
+
+        .nilm-empty {
+            text-align: center;
+            color: #4b5563;
+            font-size: 0.8rem;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .nilm-pie-container {
+            position: relative;
+            height: 220px;
+            margin: 0 auto;
+            max-width: 300px;
+        }
+
+        /* Edit modal */
+        .nilm-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nilm-modal-overlay.show { display: flex; }
+
+        .nilm-modal {
+            background: #111640;
+            border-radius: 14px;
+            padding: 24px;
+            border: 1px solid #ffffff15;
+            width: 340px;
+            max-width: 90vw;
+        }
+
+        .nilm-modal h3 {
+            margin-bottom: 16px;
+            font-size: 1rem;
+            color: #e0e0e0;
+        }
+
+        .nilm-modal label {
+            display: block;
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-bottom: 4px;
+            margin-top: 10px;
+        }
+
+        .nilm-modal input, .nilm-modal select {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #ffffff15;
+            background: #0a0e27;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+        }
+
+        .nilm-modal-btns {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        .nilm-modal-btns button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #ffffff15;
+            background: #0a0e27;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .nilm-modal-btns button.primary {
+            background: #f59e0b33;
+            border-color: #f59e0b55;
+            color: #f59e0b;
+        }
+
+        /* --- Settings gear button --- */
+        .settings-gear-btn {
+            background: none;
+            border: 1px solid #ffffff15;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+            margin-left: 8px;
+        }
+        .settings-gear-btn:hover { color: #f59e0b; border-color: #f59e0b55; }
+
+        /* --- Night Mode --- */
+        .night-toggle-btn {
+            background: none;
+            border: 1px solid #ffffff15;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        .night-toggle-btn:hover { color: #6366f1; border-color: #6366f155; }
+        .night-toggle-btn.active { color: #6366f1; border-color: #6366f155; background: #6366f115; }
+
+        body.night-mode [data-night-hide] { display: none !important; }
+
+        #solarNightView { display: none; }
+        body.night-mode #solarDayView { display: none; }
+        body.night-mode #solarNightView { display: block; }
+
+        .night-sunrise-countdown {
+            text-align: center;
+            padding: 8px 0;
+        }
+        .night-moon-icon {
+            font-size: 2.5rem;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        .night-countdown-text {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #6366f1;
+        }
+        .night-countdown-label {
+            font-size: 0.7rem;
+            color: #7a8296;
+            margin-top: 2px;
+        }
+        .night-recap {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            font-size: 0.7rem;
+            color: #9ca3af;
+        }
+        .night-recap-item {
+            text-align: center;
+        }
+        .night-recap-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f59e0b;
+        }
+
+        /* Clock */
+        .night-clock {
+            text-align: center;
+            padding: 12px 0 4px;
+            grid-column: 1 / -1;
+        }
+        .night-clock-time {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #e0e0e0;
+            letter-spacing: 2px;
+            line-height: 1;
+        }
+        .night-clock-date {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        .clock-weather-line {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+
+        /* Hide solar legend in energy chart at night */
+        body.night-mode .energy-solar-legend { display: none !important; }
+
+        .setup-wizard-btn {
+            background: none;
+            border: 1px solid #ffffff15;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            font-family: inherit;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .setup-wizard-btn:hover { color: #f59e0b; border-color: #f59e0b55; }
+
+        /* --- Settings overlay + panel --- */
+        .settings-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            display: none;
+            justify-content: flex-end;
+        }
+        .settings-overlay.open { display: flex; }
+
+        .settings-panel {
+            width: 400px;
+            max-width: 90vw;
+            height: 100vh;
+            background: linear-gradient(180deg, #0d1140 0%, #0a0e27 100%);
+            border-left: 1px solid #f59e0b33;
+            display: flex;
+            flex-direction: column;
+            animation: slideIn 0.25s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #ffffff10;
+        }
+        .settings-header h2 {
+            font-size: 1.1rem;
+            color: #f59e0b;
+        }
+        .settings-close-btn {
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .settings-close-btn:hover { color: #e0e0e0; }
+
+        .settings-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+        }
+
+        .settings-section {
+            margin-bottom: 20px;
+            border: 1px solid #ffffff08;
+            border-radius: 10px;
+            padding: 14px;
+            background: #ffffff04;
+        }
+        .settings-section h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+        .settings-section summary {
+            cursor: pointer;
+            color: #6b7280;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
+        .settings-section summary:hover { color: #e0e0e0; }
+        details.settings-section > label { display: none; }
+        details.settings-section[open] > label { display: block; }
+
+        .settings-section label {
+            display: block;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-bottom: 10px;
+        }
+        .settings-section input {
+            display: block;
+            width: 100%;
+            margin-top: 4px;
+            padding: 8px 10px;
+            background: #0a0e27;
+            border: 1px solid #ffffff15;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        .settings-section input:focus { border-color: #f59e0b55; }
+        .settings-hint {
+            display: block;
+            font-size: 0.65rem;
+            color: #4b5563;
+            margin-top: 3px;
+            font-style: italic;
+        }
+
+        .settings-footer {
+            padding: 14px 20px;
+            border-top: 1px solid #ffffff10;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .settings-save-btn {
+            padding: 8px 24px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .settings-save-btn:hover { opacity: 0.9; }
+        .settings-status {
+            font-size: 0.75rem;
+            color: #22c55e;
+        }
+
+        /* --- Tablet (portrait) --- */
+        @media (max-width: 1024px) {
+            .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 12px; }
+            .wide { grid-column: span 2; }
+        }
+
+        /* --- Phone --- */
+        @media (max-width: 600px) {
+            /* 2-column grid so top 4 cards fit on screen without scrolling */
+            .grid { grid-template-columns: repeat(2, 1fr); padding: 8px; gap: 8px; }
+            .wide { grid-column: span 2 !important; }
+
+            /* Hide secondary info on mobile */
+            [data-mobile-hide] { display: none !important; }
+
+            /* Header compact — single row */
+            .header { padding: 6px 10px; gap: 6px; flex-wrap: nowrap; overflow-x: auto; }
+            .header h1 { display: none; }
+            .header-mode { font-size: 0.65rem; padding: 2px 8px; }
+            .header-wx { font-size: 0.6rem; gap: 3px; margin-left: 0; white-space: nowrap; }
+            .header-status { font-size: 0.6rem; white-space: nowrap; }
+            #lastUpdate { display: none; }
+            .night-toggle-btn { padding: 3px 5px; font-size: 0.85rem; }
+            .settings-gear-btn { padding: 3px 5px; margin-left: 0; }
+
+            /* Card base compact */
+            .card { padding: 10px 12px; border-radius: 10px; }
+            .card-title { font-size: 0.6rem; margin-bottom: 4px !important; }
+
+            /* --- Solar card compact --- */
+            #solarCard .sun-arc-wrap { height: 60px !important; }
+            .pv-power-num { font-size: 1.6rem !important; }
+            #solarCard .card-title { margin-bottom: 0 !important; }
+
+            /* --- Battery card compact --- */
+            #batterySoc { font-size: 1.5rem !important; }
+            #batterySvg { height: 20px !important; }
+
+            /* --- Home & Grid card compact --- */
+            .load-power-num { font-size: 1.5rem !important; white-space: nowrap; }
+            .load-today-kwh { display: none; }
+            .load-l1l2 { display: none; }
+            .home-grid-divider { margin: 4px 0 !important; }
+            .grid-power-num { font-size: 1.1rem !important; white-space: nowrap; }
+            .grid-detail { font-size: 0.55rem !important; }
+
+            /* Hide Setup button on mobile */
+            .mobile-hide-btn { display: none !important; }
+
+            /* --- Money Saved card compact --- */
+            #liveDollar { font-size: 1.5rem !important; }
+            .money-sub-value { font-size: 0.9rem !important; }
+            .money-sub-box { padding: 6px 4px !important; }
+
+            /* --- Power Flow compact --- */
+            .pf-wrapper { height: 260px; }
+            .pf-icon { width: 36px; height: 36px; font-size: 1rem; }
+            .pf-node { gap: 2px; }
+            .pf-label { font-size: 0.55rem; }
+            .pf-value { font-size: 0.75rem; }
+            .pf-detail { display: none; }
+            #pfSolar { left: 15% !important; }
+            #pfGrid { left: 85% !important; }
+            #pfBattery { left: 15% !important; }
+            #pfHome { left: 85% !important; }
+
+            /* --- Bottom section compact --- */
+            .bottom-section { padding: 0 8px 8px; }
+            .bottom-card { padding: 12px; overflow-x: hidden; }
+            .tab-bar { flex-wrap: wrap; }
+            .tab-btn { padding: 5px 10px; font-size: 0.7rem; }
+            .history-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .history-table th, .history-table td { padding: 5px 6px; font-size: 0.7rem; white-space: nowrap; }
+            .nilm-grid { grid-template-columns: 1fr; }
+            .nilm-sig-detail-row { font-size: 0.65rem; }
+            .nilm-panel { overflow-x: hidden; }
+            .facts-grid {
+                display: flex;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                gap: 8px;
+                padding-bottom: 6px;
+            }
+            .facts-grid .fact {
+                min-width: 90px;
+                flex-shrink: 0;
+                padding: 10px 8px;
+            }
+            .facts-grid .fact-icon { font-size: 1.1rem; }
+            .facts-grid .fact-value { font-size: 0.95rem; }
+            .settings-panel { width: 95%; max-height: 90vh; }
+            .settings-gear-btn { padding: 4px 6px; }
+            .setup-wizard-btn { padding: 4px 8px; font-size: 0.65rem; }
+
+            /* Night mode clock compact */
+            .night-clock-time { font-size: 2.2rem; }
+            .clock-weather-line { font-size: 0.7rem; }
+            .night-moon-icon { font-size: 1.8rem; }
+            .night-countdown-text { font-size: 1.1rem; }
+        }
+
+        /* --- Solar Forecast card --- */
+        .forecast-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .forecast-day {
+            background: #0a0e2799;
+            border-radius: 10px;
+            padding: 10px 12px;
+            border: 1px solid #ffffff08;
+        }
+        .forecast-day-today {
+            border: 1px solid #f59e0b22;
+            padding: 12px 14px;
+        }
+        .forecast-day-today .fc-wx-icon { font-size: 1.3rem; }
+        .forecast-day-today .fc-desc { font-size: 0.85rem; }
+        .forecast-day-today .fc-temp { font-size: 1rem; }
+        .forecast-day-tomorrow {
+            opacity: 0.55;
+            padding: 6px 12px;
+        }
+        .forecast-day-tomorrow .fc-wx-icon { font-size: 0.85rem; }
+        .forecast-day-tomorrow .fc-desc { font-size: 0.6rem; }
+        .forecast-day-tomorrow .fc-temp { font-size: 0.7rem; }
+        .forecast-day-tomorrow .fc-period-detail { font-size: 0.45rem; }
+        .forecast-day-tomorrow .fc-period-header { font-size: 0.5rem; }
+        .forecast-day-tomorrow .forecast-day-label { font-size: 0.55rem; }
+        .forecast-day-tomorrow .solar-score-badge { font-size: 0.6rem; }
+        .forecast-day-tomorrow .solar-est-kwh { font-size: 0.65rem; }
+        .forecast-day-tomorrow .fc-sun-hrs { font-size: 0.45rem; }
+        .fc-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .forecast-day-label {
+            font-size: 0.7rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .fc-solar-inline {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .solar-score-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #ffffff08;
+        }
+        .solar-est-kwh {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #f59e0b;
+        }
+        .solar-est-label {
+            font-size: 0.6rem;
+            color: #6b7280;
+        }
+        .fc-sun-hrs {
+            font-size: 0.55rem;
+            color: #4b5563;
+        }
+        .fc-periods {
+            display: flex;
+            gap: 0;
+        }
+        .fc-period {
+            flex: 1;
+            text-align: left;
+            padding: 8px 10px;
+        }
+        .fc-period:first-child {
+            border-radius: 6px 0 0 6px;
+            background: linear-gradient(135deg, #1a1e3a 0%, #14183000 100%);
+            border-right: 1px solid #f59e0b22;
+        }
+        .fc-period:last-child {
+            border-radius: 0 6px 6px 0;
+            background: linear-gradient(135deg, #0d1030 0%, #0a0c2000 100%);
+        }
+        .fc-period-header {
+            font-size: 0.6rem;
+            color: #6b7280;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        .fc-period-main {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+        .fc-wx-icon {
+            font-size: 1.1rem;
+        }
+        .fc-desc {
+            font-size: 0.75rem;
+            color: #e0e0e0;
+        }
+        .fc-temp {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-left: auto;
+        }
+        .fc-temp-hi { color: #ef4444; }
+        .fc-temp-lo { color: #60a5fa; }
+        .fc-period-detail {
+            font-size: 0.55rem;
+            color: #6b7280;
+        }
+
+        /* --- Chart range toggle --- */
+        .chart-range-toggle {
+            display: flex;
+            gap: 2px;
+            background: #0a0e27;
+            border-radius: 6px;
+            border: 1px solid #ffffff15;
+            padding: 2px;
+        }
+        .chart-range-btn {
+            padding: 3px 10px;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+            font-size: 0.65rem;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .chart-range-btn:hover { color: #e0e0e0; }
+        .chart-range-btn.active {
+            background: #f59e0b22;
+            color: #f59e0b;
+        }
+
+        .chart-day-nav {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chart-nav-btn {
+            background: #0a0e27;
+            border: 1px solid #ffffff15;
+            color: #9ca3af;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: inherit;
+            transition: all 0.2s;
+            padding: 0;
+        }
+        .chart-nav-btn:hover { color: #f59e0b; border-color: #f59e0b55; }
+        .chart-nav-btn:disabled { opacity: 0.3; cursor: default; }
+        .chart-nav-btn:disabled:hover { color: #9ca3af; border-color: #ffffff15; }
+        .chart-nav-label {
+            font-size: 0.65rem;
+            color: #e0e0e0;
+            font-weight: 600;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        /* --- Uptime footer --- */
+        .uptime-footer {
+            text-align: center;
+            padding: 12px 16px;
+            font-size: 0.65rem;
+            color: #4b5563;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== HEADER ===== -->
+    <div class="header">
+        <h1>Solar Dashboard</h1>
+        <div class="header-mode" id="modeBanner">--</div>
+        <div class="header-status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting</span>
+            <span id="lastUpdate" style="color:#4b5563;"></span>
+        </div>
+        <button class="night-toggle-btn" id="nightToggleBtn" onclick="toggleNightMode()" title="Toggle night mode">&#127769;</button>
+        <button class="settings-gear-btn" onclick="toggleSettings()" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        </button>
+        <a href="/setup" class="setup-wizard-btn mobile-hide-btn" title="Setup Wizard">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z"/></svg>
+            Setup
+        </a>
+        <span id="wxFeels" style="display:none;">--</span>
+        <span id="wxHumidity" style="display:none;">--</span>
+        <span id="wxSunshine" style="display:none;">--</span>
+        <span id="wxUvMax" style="display:none;">--</span>
+        <span id="wxLocation" style="display:none;">--</span>
+        <span id="wxUpdated" style="display:none;">--</span>
+    </div>
+
+    <!-- ===== SETTINGS PANEL ===== -->
+    <div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this)toggleSettings()">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button class="settings-close-btn" onclick="toggleSettings()">&times;</button>
+            </div>
+            <div class="settings-body">
+                <!-- Connection -->
+                <div class="settings-section">
+                    <h3>Connection</h3>
+                    <label>MQTT Broker IP <input type="text" id="set_mqtt_broker" placeholder="192.168.1.252"><span class="settings-hint">Solar Assistant IP address</span></label>
+                    <label>MQTT Port <input type="number" id="set_mqtt_port" placeholder="1883"></label>
+                    <label>MQTT Username <input type="text" id="set_mqtt_user" placeholder="(optional)"></label>
+                    <label>MQTT Password <input type="password" id="set_mqtt_pass" placeholder="(optional)"></label>
+                    <label>SA Host <input type="text" id="set_sa_host" placeholder="192.168.1.252"><span class="settings-hint">For InfluxDB history queries (usually same as MQTT)</span></label>
+                </div>
+                <!-- Location -->
+                <div class="settings-section">
+                    <h3>Location</h3>
+                    <label>Latitude <input type="text" id="set_location_lat" placeholder="39.72317"></label>
+                    <label>Longitude <input type="text" id="set_location_lon" placeholder="-74.84905"></label>
+                    <label>Display Name <input type="text" id="set_location_name" placeholder="Waterford Works, NJ"></label>
+                    <label>Timezone <input type="text" id="set_timezone" placeholder="America/New_York"><span class="settings-hint">IANA timezone (e.g. America/Chicago, Europe/London)</span></label>
+                </div>
+                <!-- Energy & Cost -->
+                <div class="settings-section">
+                    <h3>Energy &amp; Cost</h3>
+                    <label>Electricity Rate ($/kWh) <input type="number" id="set_electricity_rate" step="0.01" placeholder="0.30"></label>
+                </div>
+                <!-- Battery -->
+                <div class="settings-section">
+                    <h3>Battery</h3>
+                    <label>Battery Capacity (Wh) <input type="number" id="set_battery_capacity_wh" placeholder="0"><span class="settings-hint">0 = auto-detect from voltage</span></label>
+                    <label>Inverter Idle Load (W) <input type="number" id="set_inverter_idle_load" placeholder="70"><span class="settings-hint">Watts drawn when nothing else is on</span></label>
+                </div>
+                <!-- NILM / Advanced -->
+                <details class="settings-section">
+                    <summary><h3 style="display:inline;">Advanced / NILM</h3></summary>
+                    <label>Edge Threshold (W) <input type="number" id="set_nilm_edge_threshold" placeholder="15"><span class="settings-hint">Min watt change to detect an appliance event</span></label>
+                    <label>Debounce (seconds) <input type="number" id="set_nilm_debounce" placeholder="8"><span class="settings-hint">Ignore rapid fluctuations within this window</span></label>
+                    <label>Signature Tolerance <input type="number" id="set_nilm_signature_tolerance" step="0.05" placeholder="0.25"><span class="settings-hint">0.25 = 25% variation when matching</span></label>
+                    <label>Smoothing Window <input type="number" id="set_nilm_smoothing_window" placeholder="3"><span class="settings-hint">Samples for moving average</span></label>
+                </details>
+                <!-- Server -->
+                <details class="settings-section">
+                    <summary><h3 style="display:inline;">Server</h3></summary>
+                    <label>Web Port <input type="number" id="set_web_port" placeholder="5050"><span class="settings-hint">Requires server restart to take effect</span></label>
+                </details>
+            </div>
+            <div class="settings-footer">
+                <button class="settings-save-btn" onclick="saveSettings()">Save Settings</button>
+                <span class="settings-status" id="settingsStatus"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CARD GRID ===== -->
+    <div class="grid">
+
+        <!-- Night clock (visible only in night mode) -->
+        <div class="night-clock">
+            <div class="night-clock-time" id="nightClockTime">--:--</div>
+            <div class="night-clock-date" id="nightClockDate">--</div>
+            <div class="clock-weather-line" id="clockWeatherLine"><span id="clockWxIcon">--</span> <span id="clockWxTemp">--</span>&deg;F &middot; <span id="clockWxDesc">--</span> &middot; H:<span style="color:#ef4444;" id="clockWxHi">--</span>&deg; L:<span style="color:#60a5fa;" id="clockWxLo">--</span>&deg;</div>
+        </div>
+
+        <!-- Solar Production -->
+        <div class="card" id="solarCard" style="position: relative; overflow: hidden;">
+            <!-- Dynamic sky background -->
+            <div class="sky-bg" id="skyBg">
+                <div class="cloud cloud-1" id="cloud1"></div>
+                <div class="cloud cloud-2" id="cloud2"></div>
+                <div class="cloud cloud-3" id="cloud3"></div>
+                <div class="cloud cloud-4" id="cloud4"></div>
+                <div class="cloud cloud-5" id="cloud5"></div>
+                <div class="star" style="top:12%;left:15%;animation-delay:0s;"></div>
+                <div class="star" style="top:8%;left:45%;animation-delay:1.2s;"></div>
+                <div class="star" style="top:22%;left:72%;animation-delay:0.5s;"></div>
+                <div class="star" style="top:35%;left:28%;animation-delay:2s;"></div>
+                <div class="star" style="top:15%;left:85%;animation-delay:0.8s;"></div>
+                <div class="star" style="top:42%;left:55%;animation-delay:1.5s;"></div>
+                <div class="star" style="top:5%;left:62%;animation-delay:2.5s;"></div>
+                <div class="star" style="top:30%;left:10%;animation-delay:0.3s;"></div>
+                <div class="star" style="top:18%;left:38%;animation-delay:1.8s;"></div>
+                <div class="star" style="top:40%;left:90%;animation-delay:1s;"></div>
+            </div>
+            <div class="card-title" style="margin-bottom: 0; position: relative; z-index: 1;">Solar Production</div>
+            <!-- Night view (hidden during day) -->
+            <div id="solarNightView" style="position: relative; z-index: 1; text-shadow: 0 1px 6px rgba(0,0,0,0.8);">
+                <div class="night-sunrise-countdown">
+                    <div class="night-moon-icon">&#127769;</div>
+                    <div class="night-countdown-text" id="sunriseCountdown">--</div>
+                    <div class="night-countdown-label">until sunrise</div>
+                </div>
+                <div class="night-recap">
+                    <div class="night-recap-item">
+                        <div class="night-recap-value" id="nightRecapKwh">--</div>
+                        <div>kWh today</div>
+                    </div>
+                    <div class="night-recap-item">
+                        <div class="night-recap-value" id="nightRecapPeak">--</div>
+                        <div>W peak</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Day view (default) -->
+            <div id="solarDayView">
+            <div class="sun-arc-wrap" style="position: relative; width: 100%; height: 80px; margin-top: 4px;">
+                <svg id="sunArc" viewBox="0 0 260 100" preserveAspectRatio="xMidYMid meet" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                    <defs>
+                        <radialGradient id="sunGlowGrad">
+                            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+                        </radialGradient>
+                    </defs>
+                    <path id="sunPath" d="M 15 85 Q 130 -5 245 85" fill="none" stroke="#f59e0b18" stroke-width="1.5" stroke-dasharray="4,4"/>
+                    <path id="sunPathLit" d="" fill="none" stroke="#f59e0b40" stroke-width="2.5"/>
+                    <circle id="sunGlow" cx="130" cy="40" r="24" fill="url(#sunGlowGrad)" opacity="0"/>
+                    <circle id="sunDot" cx="130" cy="40" r="4" fill="#f59e0b" opacity="0"/>
+                    <g id="sunRays" opacity="0"></g>
+                    <text id="sunriseLabel" x="18" y="96" fill="#f59e0b99" font-size="9" font-weight="600" text-anchor="start">--</text>
+                    <text id="sunsetLabel" x="242" y="96" fill="#f59e0b99" font-size="9" font-weight="600" text-anchor="end">--</text>
+                </svg>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 1; text-shadow: 0 1px 6px rgba(0,0,0,0.8);">
+                    <div class="pv-power-num" style="font-size: 2.4rem; font-weight: 700; color: #f59e0b; line-height: 1;">
+                        <span id="pvPower">--</span><span style="font-size: 0.9rem; color: #9ca3af;" data-sky-subtle> W</span>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #7a8296; margin-top: 2px;" data-sky-secondary>
+                        <span id="pvVoltage1">--</span>V &middot; <span id="pvCurrent1">--</span>A
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.7);">
+                <div style="font-size: 0.7rem; color: #9ca3af;" data-sky-secondary>
+                    <span style="color: #f59e0b;">&#9728;&#65039;</span> <span id="sunriseTime" style="color: #e0e0e0; font-weight: 600;">--</span>
+                </div>
+                <div style="text-align: center;">
+                    <span style="font-size: 0.85rem; color: #f59e0b; font-weight: 600;">
+                        <span id="pvEnergySession">--</span><span style="font-size: 0.7rem; color: #9ca3af;" data-sky-subtle> kWh today</span>
+                    </span>
+                </div>
+                <div style="font-size: 0.7rem; color: #9ca3af;" data-sky-secondary>
+                    <span style="color: #6366f1;">&#127769;</span> <span id="sunsetTime" style="color: #e0e0e0; font-weight: 600;">--</span>
+                </div>
+            </div>
+            <div data-mobile-hide style="text-align: center; font-size: 0.7rem; color: #9ca3af; margin-top: 2px; position: relative; z-index: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.7);" data-sky-subtle>
+                <span id="daylightHours" style="color: #b0b8c8;">--</span> of daylight
+            </div>
+            <div data-mobile-hide style="text-align: center; font-size: 0.65rem; color: #8090a8; margin-top: 1px; position: relative; z-index: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.7);" data-sky-subtle>
+                <span id="solarCloudCover">-- cloud cover</span>
+            </div>
+            </div><!-- /solarDayView -->
+        </div>
+
+        <!-- Battery -->
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 8px;">Battery</div>
+            <div style="display: flex; align-items: baseline; gap: 4px;">
+                <span style="font-size: 2rem; font-weight: 700; color: #22c55e; line-height:1;" id="batterySoc">--</span><span style="font-size:0.85rem; color:#6b7280;">%</span>
+                <span style="font-size: 0.7rem; color: #6b7280; margin-left: 4px;" id="batteryDirection"></span>
+            </div>
+            <!-- Battery-shaped SVG graphic -->
+            <svg id="batterySvg" viewBox="0 0 200 28" style="width: 100%; height: 28px; margin-top: 4px;">
+                <!-- Battery body outline -->
+                <rect x="1" y="2" width="188" height="24" rx="4" ry="4" fill="#1e2247" stroke="#374151" stroke-width="1.5"/>
+                <!-- Fill bar (scales from 0 to 184px wide inside the body) -->
+                <rect id="batteryFill" x="3" y="4" width="0" height="20" rx="3" ry="3" style="transition: width 1s, fill 1s;"/>
+                <!-- Terminal nub on the right -->
+                <rect x="190" y="8" width="6" height="12" rx="2" ry="2" fill="#374151"/>
+            </svg>
+            <div style="font-size: 0.7rem; color: #6b7280; margin-top: 3px;">
+                <span id="batteryVoltage">--</span>V &middot; <span id="batteryCurrent">--</span>A &middot; <span id="batteryPower">--</span>W
+            </div>
+            <div style="font-size: 0.65rem; color: #4b5563; margin-top: 2px;">
+                <span id="batteryRate">--</span>
+            </div>
+            <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 2px;">
+                <span id="batteryTimeRemaining">—</span>
+            </div>
+        </div>
+
+        <!-- Home & Grid -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <div class="card-title" style="margin-bottom: 8px;">Home & Grid</div>
+                <div class="load-today-kwh" style="font-size: 0.75rem; color: #3b82f6;">
+                    Today: <span id="loadEnergySession" style="font-weight:600;">--</span> kWh
+                </div>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+                <div class="load-power-num" style="font-size: 2rem; font-weight: 700; color: #3b82f6; line-height: 1;">
+                    <span id="loadPower">--</span><span style="font-size:0.85rem; color:#6b7280;"> W</span>
+                </div>
+                <div class="load-l1l2" style="font-size: 0.7rem; color: #6b7280;">
+                    L1: <span id="loadPower1">--</span>W &middot; L2: <span id="loadPower2">--</span>W
+                </div>
+            </div>
+            <div data-mobile-hide style="font-size: 0.65rem; color: #4b5563; margin-top: 2px;">
+                Lifetime: <span id="loadEnergyTotal">--</span> kWh
+            </div>
+            <div class="home-grid-divider" style="height: 1px; background: #ffffff08; margin: 8px 0;"></div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="grid-power-num" style="font-size: 1.4rem; font-weight: 700; color: #ef4444; line-height:1;">
+                    <span id="gridPower">--</span><span style="font-size:0.75rem; color:#6b7280;"> W</span>
+                </div>
+                <div class="grid-detail" style="font-size: 0.65rem; color: #6b7280;">
+                    <span id="gridVoltage">--</span>V @ <span id="gridFrequency">--</span>Hz
+                    &middot; In: <span id="gridEnergyIn">--</span> / Out: <span id="gridEnergyOut">--</span> kWh
+                </div>
+            </div>
+        </div>
+
+        <!-- Money Saved -->
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 8px;">Money Saved</div>
+            <div style="text-align: center; margin-bottom: 8px;">
+                <div style="font-size: 2rem; font-weight: 700; color: #22c55e; line-height: 1;" id="liveDollar">$0.00</div>
+                <div style="font-size: 0.6rem; color: #4b5563; margin-top: 2px;">all time saved</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <div class="money-sub-box" style="flex:1; text-align:center; background:#0a0e2799; border-radius:8px; padding:8px 4px; border:1px solid #f59e0b15;">
+                    <div class="money-sub-value" style="font-size: 1.1rem; font-weight: 700; color: #f59e0b;" id="todayDollar">$0.00</div>
+                    <div style="font-size: 0.6rem; color: #4b5563;" id="todayDollarLabel">today</div>
+                </div>
+                <div class="money-sub-box" style="flex:1; text-align:center; background:#0a0e2799; border-radius:8px; padding:8px 4px; border:1px solid #22c55e15;">
+                    <div class="money-sub-value" style="font-size: 1.1rem; font-weight: 700; color: #22c55e;" id="batDollar">$0.00</div>
+                    <div style="font-size: 0.6rem; color: #4b5563;" id="batDollarLabel">battery tonight</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Solar Forecast -->
+        <div class="card wide" id="forecastCard">
+            <div class="card-title" style="margin-bottom: 8px;">Solar Forecast</div>
+            <div class="forecast-row" id="forecastRow">
+                <!-- TODAY -->
+                <div class="forecast-day forecast-day-today" id="fcDay0">
+                    <div class="fc-header-row">
+                        <div class="forecast-day-label">Today</div>
+                        <div class="fc-solar-inline">
+                            <span class="solar-score-badge" id="fcScore0">--</span>
+                            <span class="solar-est-kwh" id="fcEstKwh0">--</span><span class="solar-est-label"> kWh</span>
+                            <span class="fc-sun-hrs"><span id="fcSunHrs0">--</span>h/<span id="fcDayHrs0">--</span>h sun</span>
+                        </div>
+                    </div>
+                    <div class="fc-periods">
+                        <div class="fc-period">
+                            <div class="fc-period-header">&#9728;&#65039; Day</div>
+                            <div class="fc-period-main">
+                                <span class="fc-wx-icon" id="fcDayIcon0">--</span>
+                                <span class="fc-desc" id="fcDayDesc0">--</span>
+                                <span class="fc-temp fc-temp-hi" id="fcDayHigh0">--</span>&deg;
+                            </div>
+                            <div class="fc-period-detail">Rain <span id="fcDayPrecip0">--</span>% &middot; Wind <span id="fcDayWind0">--</span> mph &middot; UV <span id="fcUv0">--</span></div>
+                        </div>
+                        <div class="fc-period">
+                            <div class="fc-period-header">&#127769; Night</div>
+                            <div class="fc-period-main">
+                                <span class="fc-wx-icon" id="fcNightIcon0">--</span>
+                                <span class="fc-desc" id="fcNightDesc0">--</span>
+                                <span class="fc-temp fc-temp-lo" id="fcNightLow0">--</span>&deg;
+                            </div>
+                            <div class="fc-period-detail">Rain <span id="fcNightPrecip0">--</span>% &middot; Wind <span id="fcNightWind0">--</span> mph &middot; Clouds <span id="fcNightCloud0">--</span>%</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- TOMORROW -->
+                <div class="forecast-day forecast-day-tomorrow" id="fcDay1">
+                    <div class="fc-header-row">
+                        <div class="forecast-day-label">Tomorrow</div>
+                        <div class="fc-solar-inline">
+                            <span class="solar-score-badge" id="fcScore1">--</span>
+                            <span class="solar-est-kwh" id="fcEstKwh1">--</span><span class="solar-est-label"> kWh</span>
+                            <span class="fc-sun-hrs"><span id="fcSunHrs1">--</span>h/<span id="fcDayHrs1">--</span>h sun</span>
+                        </div>
+                    </div>
+                    <div class="fc-periods">
+                        <div class="fc-period">
+                            <div class="fc-period-header">&#9728;&#65039; Day</div>
+                            <div class="fc-period-main">
+                                <span class="fc-wx-icon" id="fcDayIcon1">--</span>
+                                <span class="fc-desc" id="fcDayDesc1">--</span>
+                                <span class="fc-temp fc-temp-hi" id="fcDayHigh1">--</span>&deg;
+                            </div>
+                            <div class="fc-period-detail">Rain <span id="fcDayPrecip1">--</span>% &middot; Wind <span id="fcDayWind1">--</span> mph &middot; UV <span id="fcUv1">--</span></div>
+                        </div>
+                        <div class="fc-period">
+                            <div class="fc-period-header">&#127769; Night</div>
+                            <div class="fc-period-main">
+                                <span class="fc-wx-icon" id="fcNightIcon1">--</span>
+                                <span class="fc-desc" id="fcNightDesc1">--</span>
+                                <span class="fc-temp fc-temp-lo" id="fcNightLow1">--</span>&deg;
+                            </div>
+                            <div class="fc-period-detail">Rain <span id="fcNightPrecip1">--</span>% &middot; Wind <span id="fcNightWind1">--</span> mph &middot; Clouds <span id="fcNightCloud1">--</span>%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Power Flow -->
+        <div class="card wide" data-night-hide style="position:relative; overflow:hidden;">
+            <div class="card-title">Power Flow</div>
+            <div class="pf-wrapper" id="pfWrapper">
+                <canvas class="pf-canvas" id="pfCanvas"></canvas>
+                <div class="pf-node" id="pfSolar" style="top: 8px; left: 25%;">
+                    <div class="pf-icon solar-i" id="pfSolarIcon">&#9728;&#65039;</div>
+                    <div class="pf-label">Solar</div>
+                    <div class="pf-value" style="color:#f59e0b;" id="flowSolar">-- W</div>
+                    <div class="pf-detail" id="flowSolarDetail">--V &middot; --A</div>
+                </div>
+                <div class="pf-node" id="pfGrid" style="top: 8px; left: 75%;">
+                    <div class="pf-icon grid-i" id="pfGridIcon">&#9187;</div>
+                    <div class="pf-label">Grid</div>
+                    <div class="pf-value" style="color:#ef4444;" id="flowGrid">-- W</div>
+                    <div class="pf-detail" id="flowGridDetail">--V &middot; --Hz</div>
+                </div>
+                <div class="pf-node" id="pfInverter" style="top: 50%; left: 50%; margin-top: -42px;">
+                    <div class="pf-icon inv-i" id="pfInvIcon">&#9889;</div>
+                    <div class="pf-label">Inverter</div>
+                    <div class="pf-value" style="color:#a78bfa;" id="flowInverter">-- W</div>
+                    <div class="pf-detail" id="flowInvDetail">--&deg;C</div>
+                </div>
+                <div class="pf-node" id="pfBattery" style="bottom: 8px; left: 25%;">
+                    <div class="pf-icon bat-i" id="pfBatIcon">&#128267;</div>
+                    <div class="pf-label">Battery</div>
+                    <div class="pf-value" style="color:#22c55e;" id="flowBattery">--%</div>
+                    <div class="pf-detail" id="flowBatDetail">--V &middot; --A &middot; --W</div>
+                </div>
+                <div class="pf-node" id="pfHome" style="bottom: 8px; left: 75%;">
+                    <div class="pf-icon home-i" id="pfHomeIcon">&#127968;</div>
+                    <div class="pf-label">Home</div>
+                    <div class="pf-value" style="color:#3b82f6;" id="flowHome">-- W</div>
+                    <div class="pf-detail" id="flowHomeDetail">L1: --W &middot; L2: --W</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Energy Flow Chart -->
+        <div class="card wide" style="position: relative; overflow: hidden;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="card-title" style="margin-bottom: 0;">Energy Flow</div>
+                    <div class="chart-range-toggle">
+                        <button class="chart-range-btn active" id="chartBtnLive" onclick="setChartRange('live')">Live</button>
+                        <button class="chart-range-btn" id="chartBtn24h" onclick="setChartRange('24h')">24h</button>
+                    </div>
+                    <div class="chart-day-nav" id="chartDayNav" style="display:none;">
+                        <button class="chart-nav-btn" onclick="chartNavDay(1)" title="Previous day">&lsaquo;</button>
+                        <span class="chart-nav-label" id="chartNavLabel">Today</span>
+                        <button class="chart-nav-btn" id="chartNavFwd" onclick="chartNavDay(-1)" title="Next day">&rsaquo;</button>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 14px; font-size: 0.75rem;">
+                    <div class="energy-solar-legend" style="display:flex; align-items:center; gap:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#FADC32;box-shadow:0 0 6px #FADC3288;"></div>
+                        <span style="color:#9ca3af;">Solar</span>
+                        <span style="color:#FADC32;font-weight:600;" id="beautyPvNow">-- W</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#EF4444;box-shadow:0 0 6px #EF444488;"></div>
+                        <span style="color:#9ca3af;">Load</span>
+                        <span style="color:#EF4444;font-weight:600;" id="beautyLoadNow">-- W</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#22C55E;box-shadow:0 0 6px #22C55E88;"></div>
+                        <span style="color:#9ca3af;">Battery</span>
+                        <span style="color:#22C55E;font-weight:600;" id="beautyBatNow">-- W</span>
+                    </div>
+                </div>
+            </div>
+            <div style="position: relative; height: 280px;">
+                <canvas id="beautyChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===== STATS + HISTORY (tabbed) ===== -->
+    <div class="bottom-section">
+        <div class="bottom-card">
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('alltime')">All Time</button>
+                <button class="tab-btn" onclick="switchTab('daily')">Daily</button>
+                <button class="tab-btn" onclick="switchTab('monthly')">Monthly</button>
+                <button class="tab-btn" onclick="switchTab('yearly')">Yearly</button>
+                <button class="tab-btn" onclick="switchTab('appliances')">Appliances</button>
+            </div>
+
+            <!-- All Time tab content -->
+            <div id="tabAllTime">
+                <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <div style="flex:1; min-width: 120px; text-align:center; padding: 12px; background:#0a0e2799; border-radius:10px; border:1px solid #f59e0b22;">
+                        <div style="font-size:1.6rem; font-weight:700; color:#f59e0b;" id="statTotalPv">--</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">kWh Produced</div>
+                    </div>
+                    <div style="flex:1; min-width: 120px; text-align:center; padding: 12px; background:#0a0e2799; border-radius:10px; border:1px solid #3b82f622;">
+                        <div style="font-size:1.6rem; font-weight:700; color:#3b82f6;" id="statTotalLoad">--</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">kWh Consumed</div>
+                    </div>
+                    <div style="flex:1; min-width: 120px; text-align:center; padding: 12px; background:#0a0e2799; border-radius:10px; border:1px solid #22c55e22;">
+                        <div style="font-size:1.6rem; font-weight:700; color:#22c55e;" id="statSelfSuff">--</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">% Self-Sufficient</div>
+                    </div>
+                    <div style="flex:1; min-width: 120px; text-align:center; padding: 12px; background:#0a0e2799; border-radius:10px; border:1px solid #a78bfa22;">
+                        <div style="font-size:1.6rem; font-weight:700; color:#a78bfa;" id="statAvgDaily">--</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">Avg kWh/Day</div>
+                    </div>
+                </div>
+                <div class="facts-grid">
+                    <div class="fact"><div class="fact-icon">&#128176;</div><div class="fact-value" id="statMoney">--</div><div class="fact-label">Saved</div></div>
+                    <div class="fact"><div class="fact-icon">&#127811;</div><div class="fact-value" id="statCo2">--</div><div class="fact-label">lbs CO2</div></div>
+                    <div class="fact"><div class="fact-icon">&#127795;</div><div class="fact-value" id="statTrees">--</div><div class="fact-label">Tree-Days</div></div>
+                    <div class="fact"><div class="fact-icon">&#128664;</div><div class="fact-value" id="statEvMiles">--</div><div class="fact-label">EV Miles</div></div>
+                    <div class="fact"><div class="fact-icon">&#128241;</div><div class="fact-value" id="statPhones">--</div><div class="fact-label">iPhones</div></div>
+                    <div class="fact"><div class="fact-icon">&#128187;</div><div class="fact-value" id="statLaptops">--</div><div class="fact-label">Laptops</div></div>
+                    <div class="fact"><div class="fact-icon">&#128161;</div><div class="fact-value" id="statLed">--</div><div class="fact-label">LED Hours</div></div>
+                    <div class="fact"><div class="fact-icon">&#127909;</div><div class="fact-value" id="statNetflix">--</div><div class="fact-label">TV Hours</div></div>
+                    <div class="fact"><div class="fact-icon">&#9981;</div><div class="fact-value" id="statGas">--</div><div class="fact-label">Gal. Gas</div></div>
+                    <div class="fact"><div class="fact-icon">&#128087;</div><div class="fact-value" id="statLaundry">--</div><div class="fact-label">Laundry</div></div>
+                    <div class="fact"><div class="fact-icon">&#128703;</div><div class="fact-value" id="statShowers">--</div><div class="fact-label">Showers</div></div>
+                    <div class="fact"><div class="fact-icon">&#127829;</div><div class="fact-value" id="statPizzas">--</div><div class="fact-label">Pizzas</div></div>
+                </div>
+                <div class="history-note" id="statDateRange"></div>
+            </div>
+
+            <!-- History tab content (daily/monthly/yearly) -->
+            <div id="tabHistory" style="display: none;">
+                <div class="history-chart-container">
+                    <canvas id="historyChart"></canvas>
+                </div>
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Produced</th>
+                            <th>Consumed</th>
+                            <th>Grid In</th>
+                            <th>Grid Out</th>
+                            <th>Net</th>
+                            <th id="weatherColHeader">Weather</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <tr><td colspan="7" style="text-align:center; color:#4b5563;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Appliances tab content (NILM) -->
+            <div id="tabAppliances" style="display: none;">
+                <!-- Disclaimer Banner -->
+                <div style="background: linear-gradient(135deg, #f59e0b22 0%, #f59e0b11 100%); border: 1px solid #f59e0b44; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.5rem;">⚠️</div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 0.8rem; font-weight: 600; color: #f59e0b; margin-bottom: 2px;">Experimental Feature - Under Development</div>
+                        <div style="font-size: 0.7rem; color: #d1d5db; line-height: 1.5;">Appliance detection is a work in progress and may not always be accurate. Results can improve over time as the system learns your devices. You can manually edit appliance names and merge duplicates.</div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="font-size: 0.75rem; color: #6b7280;" id="nilmSampleCount"></div>
+                    <button onclick="reanalyzeNilm()" id="nilmReanalyzeBtn" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #a78bfa55; background: #a78bfa22; color: #a78bfa; cursor: pointer; font-size: 0.75rem; font-weight: 500;">
+                        Re-analyze History
+                    </button>
+                </div>
+                <div class="nilm-grid">
+                    <!-- Currently Active panel -->
+                    <div class="nilm-panel">
+                        <div class="nilm-panel-title">Currently Active</div>
+                        <div id="nilmActiveList">
+                            <div class="nilm-empty">No appliances detected yet</div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Events feed -->
+                    <div class="nilm-panel" style="max-height: 300px; overflow-y: auto;">
+                        <div class="nilm-panel-title">Recent Events</div>
+                        <div id="nilmEventFeed">
+                            <div class="nilm-empty">Waiting for events...</div>
+                        </div>
+                    </div>
+
+                    <!-- Energy Breakdown pie chart -->
+                    <div class="nilm-panel">
+                        <div class="nilm-panel-title">Today's Energy Breakdown</div>
+                        <div class="nilm-pie-container">
+                            <canvas id="nilmPieChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Daily Timeline -->
+                    <div class="nilm-panel">
+                        <div class="nilm-panel-title">Today's Timeline</div>
+                        <div id="nilmTimeline" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"></div>
+                    </div>
+                </div>
+
+                <!-- Known Appliances list -->
+                <div style="margin-top: 16px;">
+                    <div class="nilm-sig-toolbar">
+                        <div class="nilm-panel-title" style="margin-bottom: 0;">Known Appliances</div>
+                        <label><input type="checkbox" id="nilmHideInactive" onchange="renderNilmSignatures(nilmSignatures)"> Hide inactive</label>
+                    </div>
+                    <div class="nilm-sig-list" id="nilmSigGrid">
+                        <div class="nilm-empty">No appliances learned yet. Turn things on and off to start detecting!</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NILM Signature Edit Modal -->
+    <div class="nilm-modal-overlay" id="nilmEditModal">
+        <div class="nilm-modal">
+            <h3>Edit Appliance</h3>
+            <input type="hidden" id="nilmEditId">
+            <label>Name</label>
+            <input type="text" id="nilmEditLabel" placeholder="e.g. Fridge, TV, Microwave">
+            <label>Icon (emoji)</label>
+            <input type="text" id="nilmEditIcon" placeholder="e.g. &#x1F4FA;">
+            <label>Color</label>
+            <input type="color" id="nilmEditColor" value="#f59e0b">
+            <div style="margin-top: 10px; font-size: 0.7rem; color: #4b5563;">
+                Power: <span id="nilmEditPower">--</span>W avg &middot;
+                Events: <span id="nilmEditCount">--</span> &middot;
+                Avg duration: <span id="nilmEditDuration">--</span>
+            </div>
+            <div class="nilm-modal-btns">
+                <button onclick="closeNilmModal()">Cancel</button>
+                <button class="primary" onclick="saveNilmEdit()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align: center; padding: 12px; color: #333; font-size: 0.7rem;">
+        Solar Dashboard &mdash; Data from Solar Assistant
+    </div>
+
+<script>
+    const socket = io();
+
+    socket.on("connect", () => {
+        document.getElementById("statusDot").classList.add("connected");
+        document.getElementById("statusText").textContent = "Live";
+    });
+
+    socket.on("disconnect", () => {
+        document.getElementById("statusDot").classList.remove("connected");
+        document.getElementById("statusText").textContent = "Offline";
+    });
+
+    // --- Helper ---
+    function setText(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
+
+    // =====================================================
+    //  Energy Flow Chart (lerp + pulse)
+    // =====================================================
+    const beautyCtx = document.getElementById("beautyChart").getContext("2d");
+
+    const solarGrad = beautyCtx.createLinearGradient(0, 0, 0, 280);
+    solarGrad.addColorStop(0, "rgba(250, 220, 50, 0.5)");
+    solarGrad.addColorStop(0.5, "rgba(250, 220, 50, 0.15)");
+    solarGrad.addColorStop(1, "rgba(250, 220, 50, 0.0)");
+
+    const loadGrad = beautyCtx.createLinearGradient(0, 0, 0, 280);
+    loadGrad.addColorStop(0, "rgba(239, 68, 68, 0.4)");
+    loadGrad.addColorStop(0.5, "rgba(239, 68, 68, 0.1)");
+    loadGrad.addColorStop(1, "rgba(239, 68, 68, 0.0)");
+
+    const batGrad = beautyCtx.createLinearGradient(0, 0, 0, 280);
+    batGrad.addColorStop(0, "rgba(34, 197, 94, 0.4)");
+    batGrad.addColorStop(0.5, "rgba(34, 197, 94, 0.1)");
+    batGrad.addColorStop(1, "rgba(34, 197, 94, 0.0)");
+
+    let pulsePhase = 0;
+    const pulsePlugin = {
+        id: "pulsingEdge",
+        afterDraw(chart) {
+            const ctx = chart.ctx;
+            pulsePhase += 0.04;
+            const pulse = 0.5 + 0.5 * Math.sin(pulsePhase);
+            const colors = ["#FADC32", "#EF4444", "#22C55E"];
+            chart.data.datasets.forEach((ds, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (!meta.data || meta.data.length === 0) return;
+                const pt = meta.data[meta.data.length - 1];
+                if (!pt) return;
+                const color = colors[i] || "#fff";
+                const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 6 + pulse * 6, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${r},${g},${b},${0.15 + pulse * 0.2})`;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 3 + pulse * 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.restore();
+            });
+        },
+    };
+
+    let beautyDisplay = { labels: [], pv: [], load: [], bat: [] };
+    let beautyTarget  = { labels: [], pv: [], load: [], bat: [] };
+
+    function beautyLerpStep() {
+        const lerpFactor = 0.03;
+        if (beautyDisplay.pv.length !== beautyTarget.pv.length) return;
+        for (let i = 0; i < beautyTarget.pv.length; i++) {
+            beautyDisplay.pv[i]   += (beautyTarget.pv[i]   - beautyDisplay.pv[i])   * lerpFactor;
+            beautyDisplay.load[i] += (beautyTarget.load[i] - beautyDisplay.load[i]) * lerpFactor;
+            beautyDisplay.bat[i]  += (beautyTarget.bat[i]  - beautyDisplay.bat[i])  * lerpFactor;
+        }
+        beautyDisplay.labels = beautyTarget.labels;
+        beautyChart.data.labels = beautyDisplay.labels;
+        beautyChart.data.datasets[0].data = beautyDisplay.pv;
+        beautyChart.data.datasets[1].data = beautyDisplay.load;
+        beautyChart.data.datasets[2].data = beautyDisplay.bat;
+    }
+
+    function pulseLoop() {
+        if (chartMode === "live" && beautyDisplay.pv.length > 0) { beautyLerpStep(); beautyChart.update("none"); }
+        requestAnimationFrame(pulseLoop);
+    }
+    requestAnimationFrame(pulseLoop);
+
+    const beautyChart = new Chart(beautyCtx, {
+        type: "line",
+        plugins: [pulsePlugin],
+        data: { labels: [], datasets: [
+            { label: "Solar", data: [], borderColor: "#FADC32", backgroundColor: solarGrad, fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2.5, order: 1 },
+            { label: "Load", data: [], borderColor: "#EF4444", backgroundColor: loadGrad, fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2.5, order: 2 },
+            { label: "Battery", data: [], borderColor: "#22C55E", backgroundColor: batGrad, fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2, order: 3 },
+        ]},
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+                x: { ticks: { color: "#4b5563", maxTicksLimit: 8, font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.03)", drawBorder: false }, border: { display: false } },
+                y: { ticks: { color: "#4b5563", font: { size: 10 }, callback: v => v + " W" }, grid: { color: "rgba(255,255,255,0.04)", drawBorder: false }, border: { display: false }, beginAtZero: true },
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: "rgba(15,18,50,0.95)", titleColor: "#e0e0e0", bodyColor: "#c0c0c0", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: true, callbacks: { label: ctx => " " + ctx.dataset.label + ": " + Math.round(ctx.parsed.y) + " W" } },
+            },
+        },
+    });
+
+    function updateBeautyData(labels, pvData, loadData, batData) {
+        beautyTarget = { labels, pv: pvData, load: loadData, bat: batData };
+        if (beautyDisplay.pv.length !== pvData.length) {
+            beautyDisplay = { labels: labels.slice(), pv: pvData.slice(), load: loadData.slice(), bat: batData.slice() };
+        }
+    }
+
+    // --- Chart range toggle (Live vs 24h) ---
+    let chartMode = "live";
+    let chartDaysAgo = 0;
+
+    function setChartRange(mode) {
+        chartMode = mode;
+        document.getElementById("chartBtnLive").classList.toggle("active", mode === "live");
+        document.getElementById("chartBtn24h").classList.toggle("active", mode === "24h");
+        document.getElementById("chartDayNav").style.display = mode === "24h" ? "flex" : "none";
+
+        if (mode === "24h") {
+            chartDaysAgo = 0;
+            fetchChart24h();
+            // Always show solar dataset in 24h mode
+            beautyChart.data.datasets[0].hidden = false;
+        } else {
+            // Switch back to live — restore from current live data
+            beautyChart.options.scales.x.ticks.maxTicksLimit = 8;
+            beautyChart.data.labels = beautyDisplay.labels;
+            beautyChart.data.datasets[0].data = beautyDisplay.pv;
+            beautyChart.data.datasets[1].data = beautyDisplay.load;
+            beautyChart.data.datasets[2].data = beautyDisplay.bat;
+            beautyChart.update();
+            // Re-apply night mode hide if needed
+            if (typeof checkNightMode === 'function') checkNightMode();
+        }
+    }
+
+    function chartNavDay(delta) {
+        chartDaysAgo = Math.max(0, chartDaysAgo + delta);
+        fetchChart24h();
+    }
+
+    function fetchChart24h() {
+        var navLabel = document.getElementById("chartNavLabel");
+        var fwdBtn = document.getElementById("chartNavFwd");
+        navLabel.textContent = "Loading...";
+        fwdBtn.disabled = (chartDaysAgo <= 0);
+
+        fetch("/api/chart24h?days_ago=" + chartDaysAgo)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.error) { navLabel.textContent = "No data"; return; }
+                navLabel.textContent = d.date_label || d.date;
+                // Always show solar in 24h mode
+                beautyChart.data.datasets[0].hidden = false;
+                beautyChart.data.labels = d.labels;
+                beautyChart.data.datasets[0].data = d.pv;
+                beautyChart.data.datasets[1].data = d.load;
+                beautyChart.data.datasets[2].data = d.battery;
+                beautyChart.options.scales.x.ticks.maxTicksLimit = 12;
+                beautyChart.update();
+            })
+            .catch(function(err) {
+                console.error("24h fetch error:", err);
+                navLabel.textContent = "Error";
+            });
+    }
+
+    // =====================================================
+    //  Power Flow Canvas
+    // =====================================================
+    const pfCanvas = document.getElementById("pfCanvas");
+    const pfCtx = pfCanvas.getContext("2d");
+    let pfParticles = [];
+    let pfLines = [];
+    let pfFrameCount = 0;
+
+    function pfNodeCenter(id) {
+        const el = document.getElementById(id);
+        const wrap = document.getElementById("pfWrapper");
+        if (!el || !wrap) return [0, 0];
+        const wr = wrap.getBoundingClientRect();
+        const icon = el.querySelector(".pf-icon");
+        const r = icon.getBoundingClientRect();
+        return [r.left - wr.left + r.width / 2, r.top - wr.top + r.height / 2];
+    }
+
+    function pfResize() {
+        const wrap = document.getElementById("pfWrapper");
+        const rect = wrap.getBoundingClientRect();
+        pfCanvas.width = rect.width * devicePixelRatio;
+        pfCanvas.height = rect.height * devicePixelRatio;
+        pfCanvas.style.width = rect.width + "px";
+        pfCanvas.style.height = rect.height + "px";
+        pfCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    }
+
+    function pfBuildLines() {
+        const solar = pfNodeCenter("pfSolar"), inv = pfNodeCenter("pfInverter");
+        const bat = pfNodeCenter("pfBattery"), home = pfNodeCenter("pfHome"), grid = pfNodeCenter("pfGrid");
+        pfLines = [
+            { from: solar, to: inv, color: "#f59e0b", active: false, width: 2 },
+            { from: grid, to: inv, color: "#ef4444", active: false, width: 2 },
+            { from: inv, to: bat, color: "#22c55e", active: false, width: 2 },
+            { from: inv, to: home, color: "#3b82f6", active: false, width: 2 },
+        ];
+    }
+
+    function pfSpawnParticles(fromId, toId, color, count, speed) {
+        const routeKey = fromId + ">" + toId;
+        pfParticles = pfParticles.filter(p => p.route !== routeKey);
+        const from = pfNodeCenter(fromId), to = pfNodeCenter(toId);
+        if (count <= 0) return;
+        for (let i = 0; i < count; i++) {
+            pfParticles.push({
+                route: routeKey,
+                fx: from[0], fy: from[1], tx: to[0], ty: to[1],
+                progress: i / count,
+                speed, color,
+                // Each particle gets a random wobble phase so they don't all move identically
+                wobblePhase: Math.random() * Math.PI * 2,
+                wobbleSpeed: 2 + Math.random() * 3,
+            });
+        }
+    }
+
+    function pfDrawFrame() {
+        pfFrameCount++;
+        const w = pfCanvas.width / devicePixelRatio;
+        const h = pfCanvas.height / devicePixelRatio;
+        pfCtx.clearRect(0, 0, w, h);
+        pfCtx.lineCap = 'round';
+        pfCtx.lineJoin = 'round';
+
+        // Draw connection lines — subtle dashed line when active, very faint when not
+        pfLines.forEach(l => {
+            pfCtx.beginPath();
+            pfCtx.moveTo(l.from[0], l.from[1]);
+            pfCtx.lineTo(l.to[0], l.to[1]);
+            pfCtx.strokeStyle = l.color;
+            pfCtx.lineWidth = l.active ? l.width : 1;
+            pfCtx.globalAlpha = l.active ? 0.25 : 0.1;
+            pfCtx.stroke();
+            pfCtx.globalAlpha = 1;
+        });
+
+        // Draw particles with electric glow and subtle wobble
+        pfParticles.forEach(p => {
+            p.progress += p.speed / 200;
+            if (p.progress > 1) p.progress -= 1;
+            p.wobblePhase += p.wobbleSpeed * 0.05;
+
+            const t = p.progress;
+            // Base position along the line
+            const baseX = p.fx + (p.tx - p.fx) * t;
+            const baseY = p.fy + (p.ty - p.fy) * t;
+
+            // Subtle perpendicular wobble to give an electric feel
+            const dx = p.tx - p.fx, dy = p.ty - p.fy;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const perpX = -dy / len, perpY = dx / len;
+            const wobbleAmt = Math.sin(p.wobblePhase) * 3;
+            const x = baseX + perpX * wobbleAmt;
+            const y = baseY + perpY * wobbleAmt;
+
+            // Fade in/out at endpoints
+            const fade = Math.min(t * 6, (1 - t) * 6, 1);
+
+            // Outer glow
+            pfCtx.beginPath(); pfCtx.arc(x, y, 8, 0, Math.PI * 2);
+            pfCtx.fillStyle = p.color; pfCtx.globalAlpha = 0.1 * fade; pfCtx.fill();
+
+            // Mid glow
+            pfCtx.beginPath(); pfCtx.arc(x, y, 4, 0, Math.PI * 2);
+            pfCtx.fillStyle = p.color; pfCtx.globalAlpha = 0.5 * fade; pfCtx.fill();
+
+            // Bright core
+            pfCtx.beginPath(); pfCtx.arc(x, y, 1.8, 0, Math.PI * 2);
+            pfCtx.fillStyle = '#fff'; pfCtx.globalAlpha = 0.8 * fade; pfCtx.fill();
+
+            pfCtx.globalAlpha = 1;
+        });
+
+        requestAnimationFrame(pfDrawFrame);
+    }
+
+    function updateFlow(data) {
+        const pvPower = data.pv_power || 0, batteryPower = data.battery_power || 0;
+        const gridPower = data.grid_power || 0, loadPower = data.load_power || 0;
+        pfResize(); pfBuildLines();
+
+        document.getElementById("pfSolarIcon").classList.toggle("active", pvPower > 10);
+        document.getElementById("pfInvIcon").classList.toggle("active", pvPower > 10 || Math.abs(batteryPower) > 10);
+        document.getElementById("pfHomeIcon").classList.toggle("active", loadPower > 10);
+        document.getElementById("pfBatIcon").classList.toggle("active", Math.abs(batteryPower) > 10);
+        document.getElementById("pfGridIcon").classList.toggle("active", Math.abs(gridPower) > 10);
+
+        setText("flowSolarDetail", (data.pv_voltage_1 || "--") + "V \u00B7 " + (data.pv_current_1 || "--") + "A");
+        setText("flowGridDetail", (data.grid_voltage || "--") + "V \u00B7 " + (data.grid_frequency || "--") + "Hz");
+        setText("flowBatDetail", (data.battery_voltage || "--") + "V \u00B7 " + (data.battery_current || "--") + "A \u00B7 " + Math.abs(Math.round(batteryPower)) + "W");
+        setText("flowInvDetail", (data.inverter_temp || "--") + "\u00B0C \u00B7 " + (data.load_percentage || "--") + "% load");
+        setText("flowHomeDetail", "L1: " + Math.round(data.load_power_1 || 0) + "W \u00B7 L2: " + Math.round(data.load_power_2 || 0) + "W");
+        setText("flowInverter", Math.round(loadPower) + " W");
+
+        // Solar → Inverter
+        const solarActive = pvPower > 10;
+        pfLines[0].active = solarActive; pfLines[0].width = Math.min(2 + pvPower / 150, 6);
+        pfSpawnParticles("pfSolar", "pfInverter", "#f59e0b", solarActive ? Math.min(Math.ceil(pvPower / 150), 6) : 0, 0.8);
+
+        // Grid ↔ Inverter
+        pfLines[1].active = Math.abs(gridPower) > 10; pfLines[1].width = Math.min(2 + Math.abs(gridPower) / 150, 6);
+        if (gridPower > 10) { pfLines[1].color = "#ef4444"; pfSpawnParticles("pfGrid", "pfInverter", "#ef4444", Math.min(Math.ceil(gridPower / 150), 5), 0.8); }
+        else if (gridPower < -10) { pfLines[1].color = "#3b82f6"; pfSpawnParticles("pfInverter", "pfGrid", "#3b82f6", Math.min(Math.ceil(Math.abs(gridPower) / 150), 5), 0.8); }
+        else { pfSpawnParticles("pfGrid", "pfInverter", "#ef4444", 0, 0); }
+
+        // Inverter ↔ Battery (negative = discharging)
+        const discharging = batteryPower < -10, charging = batteryPower > 10;
+        pfLines[2].active = charging || discharging; pfLines[2].width = Math.min(2 + Math.abs(batteryPower) / 150, 6);
+        if (charging) pfSpawnParticles("pfInverter", "pfBattery", "#22c55e", Math.min(Math.ceil(Math.abs(batteryPower) / 150), 5), 0.7);
+        else if (discharging) pfSpawnParticles("pfBattery", "pfInverter", "#22c55e", Math.min(Math.ceil(Math.abs(batteryPower) / 150), 5), 0.7);
+        else pfSpawnParticles("pfInverter", "pfBattery", "#22c55e", 0, 0);
+
+        // Inverter → Home
+        pfLines[3].active = loadPower > 10; pfLines[3].width = Math.min(2 + loadPower / 150, 6);
+        pfSpawnParticles("pfInverter", "pfHome", "#3b82f6", loadPower > 10 ? Math.min(Math.ceil(loadPower / 150), 6) : 0, 0.8);
+    }
+
+    pfResize();
+    requestAnimationFrame(pfDrawFrame);
+    window.addEventListener("resize", pfResize);
+
+    // =====================================================
+    //  Battery bar color
+    // =====================================================
+    function getBatteryColor(soc) {
+        if (soc >= 80) return "linear-gradient(90deg, #22c55e, #16a34a)";
+        if (soc >= 50) return "linear-gradient(90deg, #22c55e, #eab308)";
+        if (soc >= 20) return "linear-gradient(90deg, #eab308, #f97316)";
+        return "linear-gradient(90deg, #f97316, #ef4444)";
+    }
+
+    // Solid color version for SVG fill (SVG doesn't support CSS gradients)
+    function getBatterySolidColor(soc) {
+        if (soc >= 80) return "#22c55e";
+        if (soc >= 50) return "#eab308";
+        if (soc >= 20) return "#f97316";
+        return "#ef4444";
+    }
+
+    // =====================================================
+    //  Battery Charge Rate (%/hr)
+    // =====================================================
+    // Uses current battery power with a short rolling average, plus learned
+    // battery capacity (Wh) to convert watts into %/hr instantly.
+    const batPowerSamples = [];   // last ~10 power readings for smoothing
+    const BAT_POWER_AVG_SIZE = 10;
+    let lastSoc = null, lastSocTime = 0;
+    // Learned capacity in Wh — stored in localStorage so it improves over time
+    let learnedCapacityWh = parseFloat(localStorage.getItem('batCapacityWh')) || 0;
+    let capacityAccum = [];  // [{wh: number, dsoc: number}] observations for learning
+
+    function updateBatteryRate(soc, power) {
+        const now = Date.now();
+
+        // --- Learn battery capacity from SOC + power observations ---
+        if (lastSoc !== null && lastSocTime > 0) {
+            const dtHours = (now - lastSocTime) / 3600000;
+            const dsoc = soc - lastSoc;
+            // Only learn when there's a meaningful SOC change and consistent power
+            if (Math.abs(dsoc) >= 0.5 && dtHours > 0 && batPowerSamples.length > 0) {
+                const avgP = batPowerSamples.reduce((a, b) => a + b, 0) / batPowerSamples.length;
+                const whUsed = Math.abs(avgP) * dtHours;
+                const impliedCapacity = whUsed / (Math.abs(dsoc) / 100);
+                // Sanity check — typical home batteries are 1-20 kWh
+                if (impliedCapacity > 500 && impliedCapacity < 30000) {
+                    capacityAccum.push(impliedCapacity);
+                    // Average over recent observations (keep last 20)
+                    if (capacityAccum.length > 20) capacityAccum.shift();
+                    learnedCapacityWh = capacityAccum.reduce((a, b) => a + b, 0) / capacityAccum.length;
+                    localStorage.setItem('batCapacityWh', learnedCapacityWh.toFixed(0));
+                }
+            }
+        }
+        lastSoc = soc;
+        lastSocTime = now;
+
+        // --- Track rolling average of battery power ---
+        if (power !== undefined && power !== null) {
+            batPowerSamples.push(power);
+            if (batPowerSamples.length > BAT_POWER_AVG_SIZE) batPowerSamples.shift();
+        }
+
+        if (batPowerSamples.length < 2) {
+            setText("batteryRate", "calculating...");
+            return;
+        }
+
+        const avgPower = batPowerSamples.reduce((a, b) => a + b, 0) / batPowerSamples.length;
+
+        // --- Calculate %/hr from current power ---
+        // Use learned capacity, or estimate from battery voltage if not learned yet
+        let capacityWh = learnedCapacityWh;
+        if (capacityWh < 500) {
+            // Rough estimate: most 48V systems are ~5kWh, 24V ~2.4kWh
+            const v = parseFloat(document.getElementById("batteryVoltage").textContent) || 48;
+            capacityWh = v > 40 ? 5000 : v > 20 ? 2400 : 1200;
+        }
+
+        // rate = power / capacity * 100 (%/hr)
+        // Positive power = charging, negative = discharging
+        const ratePerHour = (avgPower / capacityWh) * 100;
+
+        const el = document.getElementById("batteryRate");
+        if (Math.abs(ratePerHour) < 0.3) {
+            setText("batteryRate", "~0 %/hr (holding)");
+            if (el) el.style.color = "#6b7280";
+            setText("batteryTimeRemaining", "—");
+        } else {
+            const sign = ratePerHour > 0 ? "+" : "";
+            setText("batteryRate", sign + ratePerHour.toFixed(1) + " %/hr");
+            if (el) el.style.color = ratePerHour > 0 ? "#22c55e" : "#f59e0b";
+
+            // Time remaining calculation
+            let timeHours = 0;
+            let timeLabel = "";
+            if (ratePerHour < 0) {
+                // Discharging: how long until empty
+                timeHours = soc / Math.abs(ratePerHour);
+                timeLabel = "to empty";
+            } else {
+                // Charging: how long until full
+                timeHours = (100 - soc) / ratePerHour;
+                timeLabel = "to full";
+            }
+
+            const trEl = document.getElementById("batteryTimeRemaining");
+            if (timeHours > 99) {
+                setText("batteryTimeRemaining", "99h+ " + timeLabel);
+            } else {
+                const h = Math.floor(timeHours);
+                const m = Math.round((timeHours - h) * 60);
+                setText("batteryTimeRemaining", h + "h " + m + "m " + timeLabel);
+            }
+            if (trEl) trEl.style.color = ratePerHour > 0 ? "#22c55e" : "#f59e0b";
+        }
+    }
+
+    // =====================================================
+    //  Live MQTT data handler
+    // =====================================================
+    socket.on("solar_update", (msg) => {
+        const data = msg.all, history = msg.history;
+
+        if (data.last_update) setText("lastUpdate", data.last_update);
+
+        // Solar
+        if (data.pv_power !== undefined) { setText("pvPower", Math.round(data.pv_power)); currentPvWatts = data.pv_power; updateSmartCloudCover(); }
+        if (data.pv_voltage_1 !== undefined) setText("pvVoltage1", data.pv_voltage_1);
+        if (data.pv_current_1 !== undefined) setText("pvCurrent1", data.pv_current_1);
+
+        // Battery
+        if (data.battery_soc !== undefined) {
+            const soc = Math.round(data.battery_soc);
+            setText("batterySoc", soc);
+            const fill = document.getElementById("batteryFill");
+            fill.setAttribute("width", (soc / 100 * 184));
+            fill.setAttribute("fill", getBatterySolidColor(soc));
+            updateBatteryRate(data.battery_soc, data.battery_power);
+        }
+        if (data.battery_voltage !== undefined) setText("batteryVoltage", data.battery_voltage);
+        if (data.battery_current !== undefined) setText("batteryCurrent", data.battery_current);
+        if (data.battery_power !== undefined) {
+            const bp = data.battery_power;
+            setText("batteryPower", Math.abs(Math.round(bp)));
+            setText("batteryDirection", bp < 0 ? "discharging" : bp > 0 ? "charging" : "");
+            if (bp < 0) { currentBatDischargeW = Math.abs(bp); if (batWasCharging) { batDollarAccum = 0; batWasCharging = false; } }
+            else if (bp > 0) { currentBatDischargeW = 0; batWasCharging = true; }
+            else { currentBatDischargeW = 0; }
+        }
+
+        // Load
+        if (data.load_power !== undefined) setText("loadPower", Math.round(data.load_power));
+        if (data.load_power_1 !== undefined) setText("loadPower1", Math.round(data.load_power_1));
+        if (data.load_power_2 !== undefined) setText("loadPower2", Math.round(data.load_power_2));
+        if (data.load_energy_total !== undefined) setText("loadEnergyTotal", data.load_energy_total);
+
+        // Grid
+        if (data.grid_power !== undefined) setText("gridPower", Math.round(data.grid_power));
+        if (data.grid_voltage !== undefined) setText("gridVoltage", data.grid_voltage);
+        if (data.grid_frequency !== undefined) setText("gridFrequency", data.grid_frequency);
+        if (data.grid_energy_in !== undefined) setText("gridEnergyIn", data.grid_energy_in);
+        if (data.grid_energy_out !== undefined) setText("gridEnergyOut", data.grid_energy_out);
+
+        // Mode banner
+        if (data.device_mode !== undefined) {
+            const banner = document.getElementById("modeBanner");
+            banner.textContent = data.device_mode;
+            banner.className = (data.device_mode.includes("Solar") || data.device_mode.includes("Battery")) ? "header-mode" : "header-mode grid-mode";
+        }
+
+        // Power flow
+        setText("flowSolar", Math.round(data.pv_power || 0) + " W");
+        setText("flowBattery", Math.round(data.battery_soc || 0) + "%");
+        setText("flowHome", Math.round(data.load_power || 0) + " W");
+        setText("flowGrid", Math.round(data.grid_power || 0) + " W");
+        updateFlow(data);
+
+        // Chart live values
+        setText("beautyPvNow", Math.round(data.pv_power || 0) + " W");
+        setText("beautyLoadNow", Math.round(data.load_power || 0) + " W");
+        setText("beautyBatNow", Math.abs(Math.round(data.battery_power || 0)) + " W");
+
+        if (history && history.pv_power) {
+            const labels = history.pv_power.map(p => p.time);
+            const pvData = history.pv_power.map(p => p.value);
+            const loadData = history.load_power ? history.load_power.map(p => p.value) : [];
+            const batData = history.battery_power ? history.battery_power.map(p => Math.abs(p.value)) : [];
+            if (chartMode === "live") updateBeautyData(labels, pvData, loadData, batData);
+            // Track peak PV from history for night recap
+            const histPeak = Math.max(...pvData, 0);
+            if (histPeak > peakPvToday) { peakPvToday = histPeak; setText("nightRecapPeak", Math.round(peakPvToday)); }
+        }
+    });
+
+    // =====================================================
+    //  Tabbed Stats + History
+    // =====================================================
+    let currentTab = "alltime";
+    let historyData = {};
+
+    const histCtx = document.getElementById("historyChart").getContext("2d");
+    const historyChart = new Chart(histCtx, {
+        type: "bar",
+        data: { labels: [], datasets: [
+            { label: "Produced (kWh)", data: [], backgroundColor: "#f59e0b88", borderColor: "#f59e0b", borderWidth: 1, borderRadius: 4 },
+            { label: "Consumed (kWh)", data: [], backgroundColor: "#3b82f688", borderColor: "#3b82f6", borderWidth: 1, borderRadius: 4 },
+        ]},
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+            scales: {
+                x: { ticks: { color: "#666" }, grid: { color: "#ffffff08" } },
+                y: { ticks: { color: "#666", callback: v => v + " kWh" }, grid: { color: "#ffffff08" } },
+            },
+            plugins: { legend: { labels: { color: "#999" } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + " kWh" } } },
+        },
+    });
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll(".tab-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.textContent.toLowerCase().replace(" ", "") === tab);
+        });
+        document.getElementById("tabAllTime").style.display = tab === "alltime" ? "" : "none";
+        document.getElementById("tabHistory").style.display = (tab !== "alltime" && tab !== "appliances") ? "" : "none";
+        document.getElementById("tabAppliances").style.display = tab === "appliances" ? "" : "none";
+        if (tab === "appliances") loadNilmData();
+        else if (tab !== "alltime") loadHistory();
+    }
+
+    async function loadHistory() {
+        try {
+            const res = await fetch("/api/history/" + currentTab);
+            const data = await res.json();
+            renderHistory(data);
+        } catch (err) { console.error("Failed to load history:", err); }
+    }
+
+    function renderHistory(data) {
+        const reversed = [...data].reverse();
+        const labels = reversed.map(row => {
+            if (row.date) { const d = new Date(row.date + "T00:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+            if (row.month) { const p = row.month.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
+            return row.year || "?";
+        });
+        historyChart.data.labels = labels;
+        historyChart.data.datasets[0].data = reversed.map(r => r.pv);
+        historyChart.data.datasets[1].data = reversed.map(r => r.load);
+        historyChart.update();
+
+        const tbody = document.getElementById("historyTableBody");
+        const isDaily = currentTab === "daily";
+        document.getElementById("weatherColHeader").style.display = isDaily ? "" : "none";
+
+        if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#4b5563;">No data yet.</td></tr>`; return; }
+
+        tbody.innerHTML = data.map(row => {
+            const period = row.date || row.month || row.year || "?";
+            const net = row.pv - row.load;
+            const netClass = net >= 0 ? "net-positive" : "net-negative";
+            const daysNote = row.days ? ` <span style="color:#4b5563">(${row.days}d)</span>` : "";
+            let wxCol = "";
+            if (isDaily) {
+                if (row.conditions) {
+                    wxCol = `<td style="font-size:0.75rem;color:#9ca3af;">${row.conditions}<br><span style="color:#ef4444">${Math.round(row.high_f||0)}</span>/<span style="color:#60a5fa">${Math.round(row.low_f||0)}</span>&deg;</td>`;
+                } else { wxCol = `<td style="color:#333;">--</td>`; }
+            }
+            return `<tr><td>${period}${daysNote}</td><td class="pv-col">${row.pv.toFixed(2)}</td><td class="load-col">${row.load.toFixed(2)}</td><td class="grid-col">${row.grid_in.toFixed(2)}</td><td class="grid-col">${row.grid_out.toFixed(2)}</td><td class="net-col ${netClass}">${net >= 0 ? "+" : ""}${net.toFixed(2)}</td>${wxCol}</tr>`;
+        }).join("");
+    }
+
+    // =====================================================
+    //  All-Time Stats
+    // =====================================================
+    async function loadStats() {
+        try {
+            const res = await fetch("/api/stats");
+            const s = await res.json();
+            setText("statTotalPv", s.total_pv);
+            allTimeKwhBase = s.total_pv;
+            allTimeBatMoneySaved = s.bat_money_saved || 0;
+            solarDollarAccum = 0;
+            setText("statTotalLoad", s.total_load);
+            setText("statSelfSuff", s.self_sufficiency);
+            setText("statAvgDaily", s.avg_daily_pv);
+            var totalMoneySaved = s.money_saved + (s.bat_money_saved || 0);
+            setText("statMoney", "$" + totalMoneySaved.toFixed(2));
+            setText("statCo2", s.co2_lbs);
+            setText("statTrees", s.tree_days);
+            setText("statEvMiles", s.ev_miles);
+            setText("statPhones", s.iphones.toLocaleString());
+            setText("statLaptops", s.laptops.toLocaleString());
+            setText("statLed", s.led_hours.toLocaleString());
+            setText("statNetflix", s.netflix_hours.toLocaleString());
+            setText("statGas", s.gallons_gas);
+            setText("statLaundry", s.laundry);
+            setText("statShowers", s.showers);
+            setText("statPizzas", s.pizzas);
+            if (s.first_date && s.last_date) setText("statDateRange", "Tracking " + s.total_days + " days: " + s.first_date + " to " + s.last_date);
+        } catch (err) { console.error("Failed to load stats:", err); }
+    }
+
+    // =====================================================
+    //  Weather + Sun Arc
+    // =====================================================
+    const wxIcons = { "sun": "\u2600\uFE0F", "cloud-sun": "\u26C5", "cloud": "\u2601\uFE0F", "fog": "\uD83C\uDF2B\uFE0F", "drizzle": "\uD83C\uDF26\uFE0F", "rain": "\uD83C\uDF27\uFE0F", "snow": "\u2744\uFE0F", "storm": "\u26C8\uFE0F" };
+    let sunriseTime = null, sunsetTime = null;
+
+    function updateSunArc() {
+        if (!sunriseTime || !sunsetTime) return;
+        const now = new Date(), totalDuration = sunsetTime - sunriseTime;
+        if (totalDuration <= 0) return;
+        let t = (now - sunriseTime) / totalDuration;
+        const isDay = t >= 0 && t <= 1;
+        t = Math.max(0, Math.min(1, t));
+
+        const p0x = 15, p0y = 85, qx = 130, qy = -5, p2x = 245, p2y = 85;
+        const mt = 1 - t;
+        const sx = mt*mt*p0x + 2*mt*t*qx + t*t*p2x;
+        const sy = mt*mt*p0y + 2*mt*t*qy + t*t*p2y;
+
+        const dot = document.getElementById("sunDot"), glow = document.getElementById("sunGlow");
+        const rays = document.getElementById("sunRays"), litPath = document.getElementById("sunPathLit");
+
+        if (isDay) {
+            dot.setAttribute("cx", sx); dot.setAttribute("cy", sy); dot.setAttribute("opacity", "1");
+            glow.setAttribute("cx", sx); glow.setAttribute("cy", sy); glow.setAttribute("opacity", "1");
+            let raysHtml = "";
+            for (let i = 0; i < 8; i++) {
+                const a = (Math.PI * 2 / 8) * i;
+                raysHtml += `<line x1="${sx + Math.cos(a)*11}" y1="${sy + Math.sin(a)*11}" x2="${sx + Math.cos(a)*16}" y2="${sy + Math.sin(a)*16}" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round"/>`;
+            }
+            rays.innerHTML = raysHtml; rays.setAttribute("opacity", "0.6");
+            let litD = `M ${p0x} ${p0y}`;
+            const steps = Math.max(2, Math.round(t * 30));
+            for (let i = 1; i <= steps; i++) {
+                const st = (i / steps) * t, smt = 1 - st;
+                litD += ` L ${(smt*smt*p0x + 2*smt*st*qx + st*st*p2x).toFixed(1)} ${(smt*smt*p0y + 2*smt*st*qy + st*st*p2y).toFixed(1)}`;
+            }
+            litPath.setAttribute("d", litD);
+        } else {
+            dot.setAttribute("opacity", "0"); glow.setAttribute("opacity", "0");
+            rays.setAttribute("opacity", "0"); litPath.setAttribute("d", "");
+        }
+    }
+    setInterval(updateSunArc, 30000);
+
+    // =====================================================
+    //  Dynamic Sky Background + Smart Cloud Cover
+    // =====================================================
+    let currentCloudCover = 0;   // weather API value (0-100)
+    let effectiveCloudCover = 0; // smart blended value (0-100)
+
+    // Track peak PV output to learn system capacity — persists in localStorage
+    let peakPvWatts = parseFloat(localStorage.getItem('peakPvWatts')) || 0;
+
+    // Estimate expected PV output for current time of day using a bell curve.
+    // Returns 0-1 fraction (0 = no sun expected, 1 = solar noon peak).
+    function expectedSolarFraction() {
+        if (!sunriseTime || !sunsetTime) return 0;
+        const now = new Date();
+        const rise = sunriseTime.getTime(), set = sunsetTime.getTime();
+        const nowMs = now.getTime();
+        if (nowMs <= rise || nowMs >= set) return 0;
+        // Solar noon is midpoint between rise and set
+        const noon = (rise + set) / 2;
+        const halfDay = (set - rise) / 2;
+        // Bell curve: cos² shape peaks at noon, zero at rise/set
+        const x = (nowMs - noon) / halfDay; // -1 to 1
+        return Math.max(0, Math.cos(x * Math.PI / 2) ** 2);
+    }
+
+    // Calculate smart cloud cover blending PV output with weather data
+    function updateSmartCloudCover() {
+        const fraction = expectedSolarFraction();
+        const weatherCloud = currentCloudCover;
+
+        if (fraction <= 0.05) {
+            // Night or very early/late — just use weather data
+            effectiveCloudCover = weatherCloud;
+            updateCloudCoverDisplay(effectiveCloudCover, 'weather');
+            return;
+        }
+
+        // Update peak if current output is a new record
+        if (currentPvWatts > peakPvWatts && currentPvWatts > 50) {
+            peakPvWatts = currentPvWatts;
+            localStorage.setItem('peakPvWatts', peakPvWatts.toFixed(0));
+        }
+
+        if (peakPvWatts < 100) {
+            // Haven't learned enough yet — use weather data only
+            effectiveCloudCover = weatherCloud;
+            updateCloudCoverDisplay(effectiveCloudCover, 'weather');
+            return;
+        }
+
+        // Expected watts right now on a clear day
+        const expectedWatts = peakPvWatts * fraction;
+        // How much output is reduced vs expected (0 = full output, 1 = no output)
+        const outputDeficit = Math.max(0, Math.min(1, 1 - (currentPvWatts / expectedWatts)));
+        // Convert deficit to a cloud cover estimate (0-100)
+        const pvCloudEstimate = outputDeficit * 100;
+
+        // Blend: weight PV estimate more heavily since it's real measured data
+        // 70% PV-based, 30% weather API
+        effectiveCloudCover = Math.round(pvCloudEstimate * 0.7 + weatherCloud * 0.3);
+        effectiveCloudCover = Math.max(0, Math.min(100, effectiveCloudCover));
+
+        updateCloudCoverDisplay(effectiveCloudCover, 'estimated');
+    }
+
+    function updateCloudCoverDisplay(pct, source) {
+        const el = document.getElementById('solarCloudCover');
+        if (!el) return;
+
+        // Descriptive label based on percentage
+        let desc;
+        if (pct <= 10) desc = 'Clear';
+        else if (pct <= 30) desc = 'Mostly clear';
+        else if (pct <= 60) desc = 'Partly cloudy';
+        else if (pct <= 85) desc = 'Mostly cloudy';
+        else desc = 'Overcast';
+
+        const suffix = source === 'estimated' ? '' : ' (weather)';
+        el.textContent = Math.round(pct) + '% — ' + desc + suffix;
+    }
+
+    function updateSkyBackground() {
+        const skyBg = document.getElementById('skyBg');
+        const solarCard = document.getElementById('solarCard');
+        if (!skyBg) return;
+
+        const now = new Date();
+        const hours = now.getHours() + now.getMinutes() / 60;
+
+        // Determine sky phase based on sunrise/sunset or fallback to defaults
+        let riseH = 6.5, setH = 18.5;
+        if (sunriseTime) riseH = sunriseTime.getHours() + sunriseTime.getMinutes() / 60;
+        if (sunsetTime) setH = sunsetTime.getHours() + sunsetTime.getMinutes() / 60;
+
+        const dawnStart = riseH - 1;
+        const dawnEnd = riseH + 0.5;
+        const duskStart = setH - 0.5;
+        const duskEnd = setH + 1;
+
+        // Muted, dark-tinted gradients that blend with the dashboard's navy theme
+        let gradient, isNight = false, isDaytime = false;
+
+        if (hours < dawnStart || hours > duskEnd) {
+            // Night — very subtle, nearly matches card bg
+            gradient = 'linear-gradient(180deg, #0a0e27 0%, #0f1338 50%, #131847 100%)';
+            isNight = true;
+        } else if (hours >= dawnStart && hours < dawnEnd) {
+            // Dawn — muted amber/navy blend
+            const t = (hours - dawnStart) / (dawnEnd - dawnStart);
+            if (t < 0.5) {
+                gradient = `linear-gradient(180deg, #121535 0%, #1e1640 ${40}%, #3d2415 ${90}%)`;
+            } else {
+                gradient = `linear-gradient(180deg, #141e3a 0%, #1a2e55 ${45}%, #2e2010 ${95}%)`;
+            }
+        } else if (hours >= dawnEnd && hours < duskStart) {
+            // Daytime — dark muted blue, not bright
+            gradient = 'linear-gradient(180deg, #0f1f45 0%, #162d58 40%, #1a3565 100%)';
+            isDaytime = true;
+        } else if (hours >= duskStart && hours <= duskEnd) {
+            // Dusk — muted warm tones fading to dark
+            const t = (hours - duskStart) / (duskEnd - duskStart);
+            if (t < 0.5) {
+                gradient = `linear-gradient(180deg, #12203f 0%, #2a1a30 ${50}%, #2e1a12 ${95}%)`;
+            } else {
+                gradient = `linear-gradient(180deg, #0e1230 0%, #1a1435 ${50}%, #1a1230 ${95}%)`;
+            }
+        }
+
+        skyBg.style.background = gradient;
+
+        // Cloud opacity — driven by smart effective cloud cover
+        const cloudOpacity = Math.min(effectiveCloudCover / 100, 1);
+        const clouds = skyBg.querySelectorAll('.cloud');
+        clouds.forEach(c => {
+            c.style.opacity = cloudOpacity * 0.7;
+            // Clouds tinted to match theme — blue-grey in day, darker at night
+            c.style.background = isNight ? '#2a3050' : (isDaytime ? '#4a5a80' : '#3a4060');
+        });
+
+        // Stars visible at night, fading during dawn/dusk
+        const stars = skyBg.querySelectorAll('.star');
+        let starOpacity = 0;
+        if (isNight) {
+            starOpacity = 0.8;
+        } else if (hours >= dawnStart && hours < dawnEnd) {
+            starOpacity = Math.max(0, 0.8 * (1 - (hours - dawnStart) / (dawnEnd - dawnStart)));
+        } else if (hours >= duskStart && hours <= duskEnd) {
+            starOpacity = Math.max(0, 0.8 * ((hours - duskStart) / (duskEnd - duskStart)));
+        }
+        starOpacity *= Math.max(0.1, 1 - cloudOpacity * 0.8);
+        stars.forEach(s => {
+            s.style.opacity = starOpacity;
+            if (starOpacity > 0.1) {
+                s.classList.add('twinkle');
+            } else {
+                s.classList.remove('twinkle');
+            }
+        });
+
+        // Adaptive text colors — ensure readability against the sky
+        // During daytime the sky bg is slightly lighter, so boost secondary text
+        if (solarCard) {
+            const secondaryColor = isDaytime ? '#c0c8d8' : '#9ca3af';
+            const subtleColor = isDaytime ? '#a0a8b8' : '#6b7280';
+            // Update the voltage/current line and kWh label
+            solarCard.querySelectorAll('[data-sky-secondary]').forEach(el => el.style.color = secondaryColor);
+            solarCard.querySelectorAll('[data-sky-subtle]').forEach(el => el.style.color = subtleColor);
+        }
+    }
+
+    // Update sky every 60 seconds
+    setInterval(updateSkyBackground, 60000);
+    // Initial call
+    updateSkyBackground();
+
+    function updateWeather(w) {
+        if (!w || !w.temp_f) return;
+        setText("wxTemp", Math.round(w.temp_f)); setText("wxDesc", w.description || "--");
+        setText("wxClouds", (w.cloud_cover || 0) + "%"); setText("wxUv", w.uv_index || 0);
+        setText("wxWind", w.wind_mph || 0); setText("wxHigh", Math.round(w.high_f || 0));
+        // Clock weather display
+        setText("clockWxIcon", wxIcons[w.icon_type] || "\u2601\uFE0F");
+        setText("clockWxTemp", Math.round(w.temp_f));
+        setText("clockWxDesc", w.description || "--");
+        setText("clockWxHi", Math.round(w.high_f || 0));
+        setText("clockWxLo", Math.round(w.low_f || 0));
+        setText("wxLow", Math.round(w.low_f || 0)); setText("wxIcon", wxIcons[w.icon_type] || "\u2601\uFE0F");
+        setText("wxFeels", Math.round(w.feels_like_f)); setText("wxHumidity", (w.humidity || 0) + "%");
+        setText("wxSunshine", (w.sunshine_hours || 0) + " hrs"); setText("wxUvMax", w.uv_max || 0);
+        setText("wxUpdated", w.fetched_at || "--"); setText("wxLocation", w.location || "--");
+
+        // Populate solar forecast card
+        if (w.forecast && w.forecast.length) {
+            w.forecast.forEach(function(day, i) {
+                // Solar score (1-10) with color
+                var scoreEl = document.getElementById("fcScore" + i);
+                if (scoreEl && day.solar_score != null) {
+                    var sc = day.solar_score;
+                    scoreEl.textContent = sc + "/10";
+                    var clr = sc >= 8 ? "#22c55e" : sc >= 6 ? "#84cc16" : sc >= 4 ? "#f59e0b" : "#ef4444";
+                    scoreEl.style.color = clr;
+                    scoreEl.style.borderColor = clr;
+                    scoreEl.style.border = "1px solid " + clr + "44";
+                }
+
+                // Production estimate & sunshine
+                setText("fcEstKwh" + i, day.estimated_kwh != null ? day.estimated_kwh : "--");
+                setText("fcSunHrs" + i, day.sunshine_hours != null ? day.sunshine_hours : "--");
+                setText("fcDayHrs" + i, day.daylight_hours != null ? day.daylight_hours : "--");
+
+                // Daytime detail
+                setText("fcDayIcon" + i, wxIcons[day.day_icon] || "\u2601\uFE0F");
+                setText("fcDayDesc" + i, day.day_desc || "--");
+                setText("fcDayHigh" + i, day.day_high != null ? day.day_high : "--");
+                setText("fcDayPrecip" + i, day.day_precip_max != null ? day.day_precip_max : "--");
+                setText("fcDayWind" + i, day.day_wind_avg != null ? day.day_wind_avg : "--");
+                setText("fcUv" + i, day.uv_max != null ? day.uv_max : "--");
+
+                // Nighttime detail
+                setText("fcNightIcon" + i, wxIcons[day.night_icon] || "\u2601\uFE0F");
+                setText("fcNightDesc" + i, day.night_desc || "--");
+                setText("fcNightLow" + i, day.night_low != null ? day.night_low : "--");
+                setText("fcNightPrecip" + i, day.night_precip_max != null ? day.night_precip_max : "--");
+                setText("fcNightWind" + i, day.night_wind_avg != null ? day.night_wind_avg : "--");
+                setText("fcNightCloud" + i, day.night_cloud_avg != null ? day.night_cloud_avg : "--");
+            });
+        }
+
+        if (w.sunrise) {
+            sunriseTime = new Date(w.sunrise);
+            const rh = sunriseTime.getHours(), rm = sunriseTime.getMinutes();
+            const riseStr = ((rh % 12) || 12) + ":" + String(rm).padStart(2, "0") + (rh >= 12 ? " PM" : " AM");
+            document.getElementById("sunriseLabel").textContent = riseStr;
+            setText("sunriseTime", riseStr);
+        }
+        if (w.sunset) {
+            sunsetTime = new Date(w.sunset);
+            const sh = sunsetTime.getHours(), sm = sunsetTime.getMinutes();
+            const setStr = ((sh % 12) || 12) + ":" + String(sm).padStart(2, "0") + (sh >= 12 ? " PM" : " AM");
+            document.getElementById("sunsetLabel").textContent = setStr;
+            setText("sunsetTime", setStr);
+        }
+        if (sunriseTime && sunsetTime) {
+            const daylightMs = sunsetTime - sunriseTime;
+            const daylightH = Math.floor(daylightMs / 3600000);
+            const daylightM = Math.floor((daylightMs % 3600000) / 60000);
+            setText("daylightHours", daylightH + "h " + daylightM + "m");
+        }
+        updateSunArc();
+
+        // Update sky with smart cloud cover
+        currentCloudCover = w.cloud_cover || 0;
+        updateSmartCloudCover();
+        updateSkyBackground();
+
+        // Re-check night mode with fresh sunrise/sunset times
+        if (typeof checkNightMode === 'function') checkNightMode();
+    }
+
+    socket.on("weather_update", updateWeather);
+
+    async function loadWeather() {
+        try { const res = await fetch("/api/weather"); updateWeather(await res.json()); }
+        catch (err) { console.error("Weather error:", err); }
+    }
+
+    // =====================================================
+    //  Live Dollar Counters
+    // =====================================================
+    let allTimeKwhBase = 0, allTimeBatMoneySaved = 0, solarDollarAccum = 0;
+    let currentPvWatts = 0, currentBatDischargeW = 0, batDollarAccum = 0, batWasCharging = false;
+    let todayKwhBase = 0, todayDollarAccum = 0;
+    let RATE = 0.30;
+
+    function tickDollar() {
+        const dt = 1 / 60;
+        const solarKwhFrame = currentPvWatts / 1000 / 3600 * dt;
+        solarDollarAccum += solarKwhFrame * RATE;
+        const totalDollar = (allTimeKwhBase * RATE) + allTimeBatMoneySaved + solarDollarAccum + batDollarAccum;
+        const el = document.getElementById("liveDollar");
+        if (el) el.textContent = "$" + totalDollar.toFixed(2);
+
+        const batKwhFrame = currentBatDischargeW / 1000 / 3600 * dt;
+        batDollarAccum += batKwhFrame * RATE;
+        const batEl = document.getElementById("batDollar");
+        if (batEl) batEl.textContent = "$" + batDollarAccum.toFixed(4);
+
+        todayDollarAccum += solarKwhFrame * RATE;
+        const todayEl = document.getElementById("todayDollar");
+        if (todayEl) todayEl.textContent = "$" + ((todayKwhBase * RATE) + todayDollarAccum).toFixed(2);
+
+        requestAnimationFrame(tickDollar);
+    }
+    requestAnimationFrame(tickDollar);
+
+    async function loadToday() {
+        try {
+            const res = await fetch("/api/today");
+            const t = await res.json();
+            if (t.pv_today_kwh != null) { setText("pvEnergySession", t.pv_today_kwh); todayKwhBase = t.pv_today_kwh; todayDollarAccum = 0; setText("nightRecapKwh", t.pv_today_kwh); }
+            if (t.load_today_kwh != null) setText("loadEnergySession", t.load_today_kwh);
+            if (t.pv_peak_w) { peakPvToday = t.pv_peak_w; setText("nightRecapPeak", t.pv_peak_w); }
+        } catch (err) { console.error("Today error:", err); }
+    }
+
+    // =====================================================
+    //  NILM (Appliance Detection)
+    // =====================================================
+
+    // Pie chart for energy breakdown
+    const nilmPieCtx = document.getElementById("nilmPieChart").getContext("2d");
+    const nilmPieChart = new Chart(nilmPieCtx, {
+        type: "doughnut",
+        data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 0 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "right", labels: { color: "#9ca3af", font: { size: 11 }, padding: 8, boxWidth: 12 } },
+                tooltip: { callbacks: { label: ctx => " " + ctx.label + ": " + ctx.parsed.toFixed(3) + " kWh" } },
+            },
+        },
+    });
+
+    // Timeline rendering for daily appliance usage
+
+    // Format seconds into a readable duration string
+    function formatDuration(secs) {
+        if (!secs || secs <= 0) return "--";
+        if (secs < 60) return secs + "s";
+        if (secs < 3600) return Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        return h + "h " + m + "m";
+    }
+
+    // All NILM signatures (cached)
+    let nilmSignatures = [];
+
+    async function loadNilmData() {
+        // Load all three endpoints in parallel
+        try {
+            const [activeRes, eventsRes, sigsRes] = await Promise.all([
+                fetch("/api/nilm/active"),
+                fetch("/api/nilm/events"),
+                fetch("/api/nilm/signatures"),
+            ]);
+            const active = await activeRes.json();
+            const events = await eventsRes.json();
+            const sigs = await sigsRes.json();
+            nilmSignatures = sigs;
+
+            renderNilmActive(active);
+            renderNilmEvents(events);
+            renderNilmSignatures(sigs);
+            renderNilmPieChart(sigs);
+            renderNilmTimeline(events, sigs);
+
+            // Show summary info
+            const countEl = document.getElementById("nilmSampleCount");
+            if (countEl) countEl.textContent = sigs.length + " appliances learned \u00B7 " + events.length + " events in last 24h";
+        } catch (err) {
+            console.error("NILM load error:", err);
+        }
+    }
+
+    // Track active appliances so we can tick durations live
+    let nilmActiveData = [];
+    let nilmActiveTimestamp = 0; // when we last fetched active data
+
+    function renderNilmActive(active) {
+        const el = document.getElementById("nilmActiveList");
+        nilmActiveData = active || [];
+        nilmActiveTimestamp = Date.now();
+        _drawNilmActive();
+    }
+
+    function _drawNilmActive() {
+        const el = document.getElementById("nilmActiveList");
+        if (!nilmActiveData || nilmActiveData.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No appliances currently on</div>';
+            return;
+        }
+        // Add elapsed time since we fetched to each duration
+        const elapsed = Math.floor((Date.now() - nilmActiveTimestamp) / 1000);
+        el.innerHTML = nilmActiveData.map(a => {
+            const liveDuration = (a.duration || 0) + elapsed;
+            return `
+            <div class="nilm-active-item" onclick="openNilmModal(${a.id})" style="cursor:pointer;" title="Click to edit">
+                <div class="nilm-active-icon">${a.icon || '\uD83D\uDD0C'}</div>
+                <div class="nilm-active-info">
+                    <div class="nilm-active-label">${a.label}</div>
+                    <div class="nilm-active-detail">On for ${formatDuration(liveDuration)}</div>
+                </div>
+                <div class="nilm-active-power" style="color: ${a.color || '#f59e0b'};">${Math.round(a.power)}W</div>
+            </div>
+        `}).join("");
+    }
+
+    // Tick the active durations every second when on the appliances tab
+    setInterval(() => {
+        if (currentTab === "appliances" && nilmActiveData.length > 0) {
+            _drawNilmActive();
+        }
+    }, 1000);
+
+    function renderNilmEvents(events) {
+        const el = document.getElementById("nilmEventFeed");
+        if (!events || events.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No events in the last 24 hours</div>';
+            return;
+        }
+        el.innerHTML = events.slice(0, 50).map(e => {
+            const isOn = e.event_type === "on";
+            const dotColor = isOn ? "#22c55e" : "#ef4444";
+            const label = e.label || "Unknown";
+            const time = e.timestamp ? e.timestamp.split(" ")[1] || e.timestamp : "--";
+            const dur = e.duration ? " (" + formatDuration(e.duration) + ")" : "";
+            return `
+                <div class="nilm-event-item">
+                    <div class="nilm-event-dot" style="background: ${dotColor};"></div>
+                    <span style="color: ${e.color || '#e0e0e0'};">${e.icon || '\uD83D\uDD0C'} ${label}</span>
+                    <span style="color: #6b7280;">${isOn ? 'ON' : 'OFF'} ${Math.round(e.power_delta)}W${dur}</span>
+                    <span class="nilm-event-time">${time}</span>
+                </div>
+            `;
+        }).join("");
+    }
+
+    function renderNilmSignatures(sigs) {
+        const el = document.getElementById("nilmSigGrid");
+        if (!sigs || sigs.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No appliances learned yet. Turn things on and off to start detecting!</div>';
+            return;
+        }
+
+        // Filter inactive if checkbox is checked
+        const hideInactive = document.getElementById("nilmHideInactive").checked;
+        let filtered = sigs;
+        if (hideInactive) {
+            filtered = sigs.filter(s => s.is_active || s.daily_cycles > 0 || s.event_count >= 3);
+        }
+
+        // Sort: active first, then by event count
+        filtered = filtered.slice().sort((a, b) => {
+            if (a.is_active && !b.is_active) return -1;
+            if (!a.is_active && b.is_active) return 1;
+            return b.event_count - a.event_count;
+        });
+
+        // Find merge candidates (similar wattage, within 25% of each other)
+        const mergePairs = [];
+        for (let i = 0; i < filtered.length; i++) {
+            for (let j = i + 1; j < filtered.length; j++) {
+                const a = filtered[i], b = filtered[j];
+                const diff = Math.abs(a.power_avg - b.power_avg);
+                const avg = (a.power_avg + b.power_avg) / 2;
+                if (avg > 0 && diff / avg < 0.25) {
+                    mergePairs.push([a.id, b.id]);
+                }
+            }
+        }
+
+        if (filtered.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No active appliances. Uncheck "Hide inactive" to see all.</div>';
+            return;
+        }
+
+        el.innerHTML = filtered.map(s => {
+            const statusColor = s.is_active ? '#22c55e' : '#4b5563';
+            const statusText = s.is_active ? 'ON' : 'OFF';
+            // Check if this sig has a merge candidate
+            const hasMerge = mergePairs.some(p => p[0] === s.id || p[1] === s.id);
+            const mergeHint = hasMerge ? '<span style="color:#f59e0b; font-size:0.6rem; margin-left:4px;" title="Similar wattage to another appliance — consider merging">⚡ similar</span>' : '';
+            return `
+                <div class="nilm-sig-item">
+                    <div class="nilm-sig-row" onclick="toggleSigDetails(${s.id})">
+                        <div class="nilm-sig-icon">${s.icon || '\uD83D\uDD0C'}</div>
+                        <div class="nilm-sig-label" style="color: ${s.color || '#e0e0e0'};">${s.user_label}${mergeHint}</div>
+                        <div class="nilm-sig-power">${Math.round(s.power_avg)}W</div>
+                        <div class="nilm-sig-status" style="color:${statusColor};">${statusText}</div>
+                    </div>
+                    <div class="nilm-sig-details" id="sigDetails${s.id}">
+                        <div class="nilm-sig-detail-row"><span>Avg power</span><span>${Math.round(s.power_avg)}W (${Math.round(s.power_min)}–${Math.round(s.power_max)}W)</span></div>
+                        <div class="nilm-sig-detail-row"><span>Events</span><span>${s.event_count}</span></div>
+                        <div class="nilm-sig-detail-row"><span>Avg duration</span><span>${formatDuration(Math.round(s.avg_duration))}</span></div>
+                        <div class="nilm-sig-detail-row"><span>Daily cycles</span><span>${s.daily_cycles || 0}/day</span></div>
+                        <div class="nilm-sig-actions">
+                            <button onclick="openNilmModal(${s.id})">Edit</button>
+                            <button onclick="event.stopPropagation(); promptMerge(${s.id})">Merge</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    function toggleSigDetails(sigId) {
+        const el = document.getElementById("sigDetails" + sigId);
+        if (el) el.classList.toggle("open");
+    }
+
+    function promptMerge(keepId) {
+        const sig = nilmSignatures.find(s => s.id === keepId);
+        if (!sig) return;
+        // Find similar wattage candidates
+        const candidates = nilmSignatures.filter(s =>
+            s.id !== keepId &&
+            Math.abs(s.power_avg - sig.power_avg) / ((s.power_avg + sig.power_avg) / 2) < 0.25
+        );
+        if (candidates.length === 0) {
+            // Fall back to showing all as options
+            const all = nilmSignatures.filter(s => s.id !== keepId);
+            if (all.length === 0) return;
+            const opts = all.map(s => s.user_label + " (" + Math.round(s.power_avg) + "W) [ID:" + s.id + "]").join("\n");
+            const pick = prompt("Merge into \"" + sig.user_label + "\" — enter the ID of the appliance to absorb:\n\n" + opts);
+            if (pick) doMerge(keepId, parseInt(pick));
+        } else {
+            const opts = candidates.map(s => s.id + ": " + s.user_label + " (" + Math.round(s.power_avg) + "W)").join("\n");
+            const pick = prompt("These appliances have similar wattage to \"" + sig.user_label + "\" (" + Math.round(sig.power_avg) + "W).\nEnter the ID to merge into this one:\n\n" + opts);
+            if (pick) doMerge(keepId, parseInt(pick));
+        }
+    }
+
+    async function doMerge(keepId, mergeId) {
+        if (!mergeId || isNaN(mergeId)) return;
+        try {
+            await fetch("/api/nilm/signature/" + keepId + "/merge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ merge_id: mergeId }),
+            });
+            loadNilmData();
+        } catch (err) { console.error("Merge error:", err); }
+    }
+
+    function renderNilmPieChart(sigs) {
+        // Show signatures by estimated daily energy (power_avg * avg_duration * daily_cycles)
+        const items = sigs.filter(s => s.daily_cycles > 0 && s.avg_duration > 0).map(s => ({
+            label: s.user_label,
+            energy: (s.power_avg * s.avg_duration * s.daily_cycles) / 3600 / 1000, // kWh
+            color: s.color || "#6b7280",
+        })).sort((a, b) => b.energy - a.energy);
+
+        if (items.length === 0) {
+            nilmPieChart.data.labels = ["No data yet"];
+            nilmPieChart.data.datasets[0].data = [1];
+            nilmPieChart.data.datasets[0].backgroundColor = ["#1e2247"];
+        } else {
+            nilmPieChart.data.labels = items.map(i => i.label);
+            nilmPieChart.data.datasets[0].data = items.map(i => parseFloat(i.energy.toFixed(3)));
+            nilmPieChart.data.datasets[0].backgroundColor = items.map(i => i.color);
+        }
+        nilmPieChart.update();
+    }
+
+    function renderNilmTimeline(events, sigs) {
+        const el = document.getElementById("nilmTimeline");
+        if (!events || events.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No events today yet</div>';
+            return;
+        }
+
+        // Build a map of signature info
+        const sigMap = {};
+        (sigs || []).forEach(s => { sigMap[s.id] = s; });
+
+        // Get today's date string
+        const today = new Date().toISOString().slice(0, 10);
+
+        // Filter to today's events only
+        const todayEvents = events.filter(e => e.timestamp && e.timestamp.startsWith(today));
+        if (todayEvents.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No events today yet</div>';
+            return;
+        }
+
+        // Group events by signature_id and pair on/off into time spans
+        const spans = {}; // sigId -> [{start, end, label, color, icon}]
+        const pendingOn = {}; // sigId -> [onTimestamp, ...] (FIFO)
+
+        // Sort events chronologically
+        const sorted = todayEvents.slice().sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+        sorted.forEach(e => {
+            const sid = e.signature_id;
+            if (!sid) return;
+            const sig = sigMap[sid] || {};
+            if (!spans[sid]) spans[sid] = [];
+            if (!pendingOn[sid]) pendingOn[sid] = [];
+
+            if (e.event_type === 'on') {
+                pendingOn[sid].push(e.timestamp);
+            } else if (e.event_type === 'off' && pendingOn[sid].length > 0) {
+                const onTime = pendingOn[sid].shift();
+                spans[sid].push({
+                    start: onTime,
+                    end: e.timestamp,
+                    label: sig.user_label || e.label || 'Unknown',
+                    color: sig.color || e.color || '#6b7280',
+                    icon: sig.icon || e.icon || '',
+                });
+            }
+        });
+
+        // Add still-running appliances (on with no off yet)
+        const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        Object.keys(pendingOn).forEach(sid => {
+            const sig = sigMap[sid] || {};
+            pendingOn[sid].forEach(onTime => {
+                if (!spans[sid]) spans[sid] = [];
+                spans[sid].push({
+                    start: onTime,
+                    end: nowStr,
+                    label: sig.user_label || 'Unknown',
+                    color: sig.color || '#6b7280',
+                    icon: sig.icon || '',
+                    active: true,
+                });
+            });
+        });
+
+        // Collect all appliances that have spans
+        const appliances = Object.keys(spans).filter(sid => spans[sid].length > 0);
+        if (appliances.length === 0) {
+            el.innerHTML = '<div class="nilm-empty">No completed events today</div>';
+            return;
+        }
+
+        // Sort by earliest start time
+        appliances.sort((a, b) => {
+            const aStart = spans[a][0].start;
+            const bStart = spans[b][0].start;
+            return aStart.localeCompare(bStart);
+        });
+
+        // Time helpers
+        const nowHour = new Date().getHours() + new Date().getMinutes() / 60;
+        const timelineEnd = Math.min(Math.ceil(nowHour + 1), 24);
+        const timelineStart = 0;
+        const totalHours = timelineEnd - timelineStart;
+
+        function timeToFraction(ts) {
+            const parts = ts.split(' ')[1].split(':');
+            const h = parseInt(parts[0]) + parseInt(parts[1]) / 60 + parseInt(parts[2]) / 3600;
+            return Math.max(0, Math.min(1, (h - timelineStart) / totalHours));
+        }
+
+        // Build HTML
+        const rowHeight = 28;
+        const labelWidth = 80;
+        const barAreaWidth = 500;
+        const totalWidth = labelWidth + barAreaWidth;
+
+        let html = '<div style="min-width:' + totalWidth + 'px;">';
+
+        // Time axis at top
+        html += '<div style="display:flex; margin-left:' + labelWidth + 'px; margin-bottom:4px;">';
+        for (let h = timelineStart; h <= timelineEnd; h += Math.max(1, Math.floor(totalHours / 8))) {
+            const left = ((h - timelineStart) / totalHours) * 100;
+            const label = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
+            html += '<div style="position:absolute; left:calc(' + labelWidth + 'px + ' + left + '% * ' + barAreaWidth + ' / 100); font-size:0.55rem; color:#4b5563; transform:translateX(-50%);">' + label + '</div>';
+        }
+        html += '</div>';
+
+        // Use relative positioning for axis labels
+        html += '<div style="position:relative; padding-top:14px;">';
+
+        // Time axis labels (positioned absolutely)
+        for (let h = timelineStart; h <= timelineEnd; h += Math.max(1, Math.floor(totalHours / 8))) {
+            const left = ((h - timelineStart) / totalHours) * barAreaWidth;
+            const label = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
+            html += '<div style="position:absolute; top:0; left:' + (labelWidth + left) + 'px; font-size:0.55rem; color:#4b5563; transform:translateX(-50%);">' + label + '</div>';
+        }
+
+        // Rows
+        appliances.forEach(sid => {
+            const rowSpans = spans[sid];
+            const info = rowSpans[0];
+
+            html += '<div style="display:flex; align-items:center; height:' + rowHeight + 'px; margin-bottom:2px;">';
+
+            // Label
+            html += '<div style="width:' + labelWidth + 'px; flex-shrink:0; font-size:0.65rem; color:#e0e0e0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:6px;" title="' + info.label + '">';
+            html += (info.icon ? info.icon + ' ' : '') + info.label;
+            html += '</div>';
+
+            // Bar area
+            html += '<div style="flex:1; position:relative; height:100%; background:#ffffff04; border-radius:4px; min-width:' + barAreaWidth + 'px;">';
+
+            // Hour grid lines
+            for (let h = timelineStart; h <= timelineEnd; h++) {
+                const left = ((h - timelineStart) / totalHours) * 100;
+                html += '<div style="position:absolute; left:' + left + '%; top:0; bottom:0; width:1px; background:#ffffff08;"></div>';
+            }
+
+            // Spans
+            rowSpans.forEach(span => {
+                const startFrac = timeToFraction(span.start);
+                const endFrac = timeToFraction(span.end);
+                const leftPct = (startFrac * 100).toFixed(2);
+                const widthPct = Math.max(0.5, (endFrac - startFrac) * 100).toFixed(2);
+                const startTime = span.start.split(' ')[1].slice(0, 5);
+                const endTime = span.active ? 'now' : span.end.split(' ')[1].slice(0, 5);
+                const opacity = span.active ? '1' : '0.7';
+                const pulse = span.active ? 'box-shadow: 0 0 6px ' + span.color + '88;' : '';
+                html += '<div style="position:absolute; left:' + leftPct + '%; width:' + widthPct + '%; top:4px; bottom:4px; background:' + span.color + '; opacity:' + opacity + '; border-radius:3px; ' + pulse + '" title="' + info.label + ': ' + startTime + ' – ' + endTime + '"></div>';
+            });
+
+            html += '</div></div>';
+        });
+
+        // Now marker
+        const nowFrac = (nowHour - timelineStart) / totalHours;
+        if (nowFrac > 0 && nowFrac < 1) {
+            const nowLeft = (nowFrac * 100).toFixed(2);
+            // This will be relative to the bar area, drawn as an overlay
+        }
+
+        html += '</div></div>';
+        el.innerHTML = html;
+    }
+
+    // --- Edit modal ---
+    function openNilmModal(sigId) {
+        const sig = nilmSignatures.find(s => s.id === sigId);
+        if (!sig) return;
+        document.getElementById("nilmEditId").value = sigId;
+        document.getElementById("nilmEditLabel").value = sig.user_label || "";
+        document.getElementById("nilmEditIcon").value = sig.icon || "";
+        document.getElementById("nilmEditColor").value = sig.color || "#f59e0b";
+        setText("nilmEditPower", Math.round(sig.power_avg));
+        setText("nilmEditCount", sig.event_count);
+        setText("nilmEditDuration", formatDuration(Math.round(sig.avg_duration)));
+        document.getElementById("nilmEditModal").classList.add("show");
+    }
+
+    function closeNilmModal() {
+        document.getElementById("nilmEditModal").classList.remove("show");
+    }
+
+    async function saveNilmEdit() {
+        const sigId = document.getElementById("nilmEditId").value;
+        const label = document.getElementById("nilmEditLabel").value.trim();
+        const icon = document.getElementById("nilmEditIcon").value.trim();
+        const color = document.getElementById("nilmEditColor").value;
+        try {
+            await fetch("/api/nilm/signature/" + sigId, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ label: label || null, icon: icon || null, color: color || null }),
+            });
+            closeNilmModal();
+            loadNilmData(); // Refresh the tab
+        } catch (err) { console.error("Save error:", err); }
+    }
+
+    // Close modal on overlay click
+    document.getElementById("nilmEditModal").addEventListener("click", function(e) {
+        if (e.target === this) closeNilmModal();
+    });
+
+    // --- Reanalyze history ---
+    async function reanalyzeNilm() {
+        const btn = document.getElementById("nilmReanalyzeBtn");
+        btn.textContent = "Analyzing...";
+        btn.disabled = true;
+        btn.style.opacity = "0.5";
+        try {
+            const res = await fetch("/api/nilm/reanalyze", { method: "POST" });
+            const result = await res.json();
+            btn.textContent = "Done! " + result.events + " events, " + result.signatures + " signatures";
+            // Refresh the tab data
+            loadNilmData();
+            // Reset button text after a few seconds
+            setTimeout(() => {
+                btn.textContent = "Re-analyze History";
+                btn.disabled = false;
+                btn.style.opacity = "1";
+            }, 3000);
+        } catch (err) {
+            console.error("Reanalyze error:", err);
+            btn.textContent = "Error - try again";
+            btn.disabled = false;
+            btn.style.opacity = "1";
+        }
+    }
+
+    // Show how many samples are stored
+    async function loadNilmSampleCount() {
+        try {
+            const res = await fetch("/api/nilm/events");
+            const events = await res.json();
+            const el = document.getElementById("nilmSampleCount");
+            if (el) el.textContent = events.length + " events in last 24h";
+        } catch (err) {}
+    }
+
+    // --- Real-time NILM events via SocketIO ---
+    socket.on("nilm_event", (event) => {
+        // Refresh active list + event feed immediately
+        if (currentTab === "appliances") {
+            loadNilmData();
+        }
+    });
+
+    // Auto-refresh active appliances every 10 seconds when on the tab
+    setInterval(async () => {
+        if (currentTab === "appliances") {
+            try {
+                const res = await fetch("/api/nilm/active");
+                const active = await res.json();
+                renderNilmActive(active);
+            } catch (err) {}
+        }
+    }, 10000);
+
+    // =====================================================
+    //  Settings Panel
+    // =====================================================
+    const SETTINGS_KEYS = [
+        "mqtt_broker", "mqtt_port", "mqtt_user", "mqtt_pass", "sa_host",
+        "location_lat", "location_lon", "location_name", "timezone",
+        "electricity_rate", "battery_capacity_wh", "inverter_idle_load",
+        "nilm_edge_threshold", "nilm_debounce", "nilm_signature_tolerance",
+        "nilm_smoothing_window", "web_port"
+    ];
+
+    function toggleSettings() {
+        const overlay = document.getElementById("settingsOverlay");
+        if (overlay.classList.contains("open")) {
+            overlay.classList.remove("open");
+        } else {
+            loadSettingsForm();
+            overlay.classList.add("open");
+        }
+    }
+
+    async function loadSettingsForm() {
+        try {
+            const res = await fetch("/api/settings");
+            const settings = await res.json();
+            SETTINGS_KEYS.forEach(key => {
+                const el = document.getElementById("set_" + key);
+                if (el) el.value = settings[key] || "";
+            });
+        } catch (err) { console.error("Load settings error:", err); }
+    }
+
+    async function saveSettings() {
+        const data = {};
+        SETTINGS_KEYS.forEach(key => {
+            const el = document.getElementById("set_" + key);
+            if (el) data[key] = el.value;
+        });
+        const statusEl = document.getElementById("settingsStatus");
+        try {
+            const res = await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+            const result = await res.json();
+            if (result.ok) {
+                statusEl.textContent = "Saved!";
+                statusEl.style.color = "#22c55e";
+                // Reload the rate for dollar counters
+                loadSettingsForDashboard();
+            } else {
+                statusEl.textContent = "Error: " + (result.error || "unknown");
+                statusEl.style.color = "#ef4444";
+            }
+        } catch (err) {
+            statusEl.textContent = "Save failed";
+            statusEl.style.color = "#ef4444";
+        }
+        setTimeout(() => { statusEl.textContent = ""; }, 3000);
+    }
+
+    async function loadSettingsForDashboard() {
+        // Fetch rate + battery capacity from settings for JS-side calculations
+        try {
+            const res = await fetch("/api/settings/rate");
+            const data = await res.json();
+            if (data.rate) RATE = parseFloat(data.rate);
+            if (data.battery_capacity_wh > 0) {
+                learnedCapacityWh = data.battery_capacity_wh;
+            }
+        } catch (err) { console.error("Settings rate load error:", err); }
+    }
+
+    // =====================================================
+    //  Night Mode
+    // =====================================================
+    let nightModeManual = null; // null = auto, true = force night, false = force day
+    let peakPvToday = 0;
+
+    function checkNightMode() {
+        let isNight;
+        if (nightModeManual !== null) {
+            isNight = nightModeManual;
+        } else if (sunriseTime && sunsetTime) {
+            const now = new Date();
+            isNight = (now > sunsetTime || now < sunriseTime);
+        } else {
+            // Fallback if weather data hasn't loaded yet
+            const h = new Date().getHours();
+            isNight = (h >= 20 || h < 6);
+        }
+
+        document.body.classList.toggle('night-mode', isNight);
+
+        // Update Money Saved labels based on day/night
+        setText('todayDollarLabel', isNight ? 'tonight' : 'today');
+        setText('batDollarLabel', isNight ? 'battery tonight' : 'battery today');
+
+        // Update toggle button appearance
+        const btn = document.getElementById('nightToggleBtn');
+        if (btn) {
+            btn.innerHTML = isNight ? '&#9728;&#65039;' : '&#127769;';
+            btn.classList.toggle('active', nightModeManual !== null);
+            btn.title = nightModeManual !== null ? 'Night mode: manual override (click to auto)' : 'Toggle night mode';
+        }
+
+        // Update sunrise countdown
+        if (isNight && sunriseTime) {
+            const now = new Date();
+            let target = new Date(sunriseTime);
+            // If sunrise already passed today, use tomorrow's sunrise
+            if (now > target) {
+                target.setDate(target.getDate() + 1);
+            }
+            const diff = target - now;
+            const hours = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            setText('sunriseCountdown', hours + 'h ' + mins + 'm');
+        } else {
+            setText('sunriseCountdown', '--');
+        }
+
+        // Peak PV update (kWh is set directly in loadToday, peak in mqtt_data handler)
+        if (peakPvToday > 0) setText('nightRecapPeak', Math.round(peakPvToday));
+
+        // Update night clock
+        const now2 = new Date();
+        const h12 = now2.getHours() % 12 || 12;
+        const ampm = now2.getHours() >= 12 ? 'PM' : 'AM';
+        const mins = String(now2.getMinutes()).padStart(2, '0');
+        setText('nightClockTime', h12 + ':' + mins + ' ' + ampm);
+        const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        setText('nightClockDate', days[now2.getDay()] + ', ' + months[now2.getMonth()] + ' ' + now2.getDate());
+
+        // Hide/show solar dataset on energy flow chart
+        if (typeof beautyChart !== 'undefined') {
+            beautyChart.data.datasets[0].hidden = isNight;
+            beautyChart.update('none');
+        }
+    }
+
+    function toggleNightMode() {
+        if (nightModeManual === null) {
+            // First click: force opposite of current state
+            const currentlyNight = document.body.classList.contains('night-mode');
+            nightModeManual = !currentlyNight;
+        } else {
+            // Second click: back to auto
+            nightModeManual = null;
+        }
+        checkNightMode();
+    }
+
+    // Track peak PV for night recap
+    socket.on("mqtt_data", function(d) {
+        if (d.pv_power !== undefined) {
+            const pv = parseInt(d.pv_power) || 0;
+            if (pv > peakPvToday) peakPvToday = pv;
+        }
+    });
+
+    // =====================================================
+    //  Init
+    // =====================================================
+    loadStats();
+    loadWeather();
+    loadToday();
+    loadSettingsForDashboard();
+    checkNightMode();
+    setInterval(loadStats, 120000);
+    setInterval(loadWeather, 600000);
+    setInterval(loadToday, 60000);
+    setInterval(checkNightMode, 60000);
+
+    // Clock ticks every second
+    function tickNightClock() {
+        const now = new Date();
+        const h12 = now.getHours() % 12 || 12;
+        const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        setText('nightClockTime', h12 + ':' + mins + ' ' + ampm);
+    }
+    setInterval(tickNightClock, 1000);
+
+    // --- Server uptime counter ---
+    let serverStartTime = null;
+    fetch('/api/uptime').then(r => r.json()).then(d => {
+        serverStartTime = d.start;
+        tickUptime();
+    }).catch(() => {});
+
+    function tickUptime() {
+        if (!serverStartTime) return;
+        const secs = Math.floor(Date.now() / 1000 - serverStartTime);
+        const d = Math.floor(secs / 86400);
+        const h = Math.floor((secs % 86400) / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        let parts = [];
+        if (d > 0) parts.push(d + 'd');
+        parts.push(h + 'h');
+        parts.push(m + 'm');
+        parts.push(s + 's');
+        const el = document.getElementById('uptimeValue');
+        if (el) el.textContent = parts.join(' ');
+    }
+    setInterval(tickUptime, 1000);
+</script>
+
+<div class="uptime-footer">
+    Server uptime: <span id="uptimeValue">--</span>
+</div>
+
+</body>
+</html>
