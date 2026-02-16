@@ -1,0 +1,56 @@
+name: Build Executables
+
+# Runs when you create a release on GitHub, or manually from Actions tab
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+            artifact: SolarDashboard-Linux
+          - os: macos-latest
+            name: macOS
+            artifact: SolarDashboard-macOS
+          - os: windows-latest
+            name: Windows
+            artifact: SolarDashboard-Windows
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyinstaller flask flask-socketio paho-mqtt
+
+      # Linux and macOS use : as the path separator
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: pyinstaller --onefile --add-data "templates:templates" --name SolarDashboard app.py
+
+      # Windows uses ; as the path separator
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: pyinstaller --onefile --add-data "templates;templates" --name SolarDashboard app.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/
+
+      # Attach to the release if triggered by a release
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

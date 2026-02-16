@@ -20,6 +20,17 @@ import urllib.parse
 import time as _time
 import nilm_engine
 
+# --- PyInstaller support ---
+# When packaged as an executable, PyInstaller extracts files to a temp folder.
+# _BUNDLE_DIR = where bundled files (templates, etc.) live
+# _APP_DIR    = where the executable (or script) lives (for database, etc.)
+if getattr(sys, 'frozen', False):
+    _BUNDLE_DIR = sys._MEIPASS
+    _APP_DIR = os.path.dirname(sys.executable)
+else:
+    _BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _APP_DIR = _BUNDLE_DIR
+
 # --- Server start time (for uptime counter) ---
 SERVER_START = _time.time()
 
@@ -121,11 +132,11 @@ def _sa_grafana_url():
     host = get_setting("sa_host", "192.168.1.252")
     return f"http://{host}/grafana/api/datasources/proxy/1/query"
 
-# Database file lives in the same folder as this script
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solar_history.db")
+# Database file lives next to the executable (not in the temp bundle)
+DB_PATH = os.path.join(_APP_DIR, "solar_history.db")
 
 # --- Setup Flask + SocketIO ---
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.join(_BUNDLE_DIR, "templates"))
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Store the latest values so new browser connections get current data
