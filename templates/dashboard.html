@@ -113,11 +113,13 @@
 
         .wide { grid-column: span 4; }
 
-        /* --- Power Flow --- */
+        /* --- Power Flow (HA-style cross layout) --- */
         .pf-wrapper {
             position: relative;
             width: 100%;
-            height: 260px;
+            max-width: 500px;
+            margin: 0 auto;
+            height: 380px;
         }
 
         .pf-canvas {
@@ -133,55 +135,58 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 3px;
+            gap: 4px;
             z-index: 2;
-            transform: translateX(-50%);
         }
 
+        /* Large circle ring — contains icon + value */
         .pf-icon {
-            width: 50px;
-            height: 50px;
+            width: 82px;
+            height: 82px;
             border-radius: 50%;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 1.4rem;
+            gap: 2px;
             transition: box-shadow 0.5s;
         }
 
+        .pf-emoji { font-size: 1.3rem; line-height: 1; }
+        .pf-icon .pf-value { font-size: 0.8rem; font-weight: 700; line-height: 1; }
+
         .pf-icon.solar-i {
-            background: radial-gradient(circle, #f59e0b44 0%, #f59e0b11 100%);
-            border: 2px solid #f59e0b66;
+            border: 2.5px solid #f59e0b;
+            background: rgba(245, 158, 11, 0.05);
         }
-        .pf-icon.solar-i.active { box-shadow: 0 0 24px #f59e0b66, 0 0 48px #f59e0b22; }
+        .pf-icon.solar-i.active { box-shadow: 0 0 20px #f59e0b55, 0 0 40px #f59e0b22; }
 
         .pf-icon.inv-i {
-            background: radial-gradient(circle, #a78bfa44 0%, #a78bfa11 100%);
-            border: 2px solid #a78bfa66;
+            border: 2.5px solid #a78bfa;
+            background: rgba(167, 139, 250, 0.05);
         }
-        .pf-icon.inv-i.active { box-shadow: 0 0 24px #a78bfa66, 0 0 48px #a78bfa22; }
+        .pf-icon.inv-i.active { box-shadow: 0 0 20px #a78bfa55, 0 0 40px #a78bfa22; }
 
         .pf-icon.bat-i {
-            background: radial-gradient(circle, #22c55e44 0%, #22c55e11 100%);
-            border: 2px solid #22c55e66;
+            border: 2.5px solid #22c55e;
+            background: rgba(34, 197, 94, 0.05);
         }
-        .pf-icon.bat-i.active { box-shadow: 0 0 24px #22c55e66, 0 0 48px #22c55e22; }
+        .pf-icon.bat-i.active { box-shadow: 0 0 20px #22c55e55, 0 0 40px #22c55e22; }
 
         .pf-icon.home-i {
-            background: radial-gradient(circle, #3b82f644 0%, #3b82f611 100%);
-            border: 2px solid #3b82f666;
+            border: 2.5px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
         }
-        .pf-icon.home-i.active { box-shadow: 0 0 24px #3b82f655, 0 0 48px #3b82f622; }
+        .pf-icon.home-i.active { box-shadow: 0 0 20px #3b82f655, 0 0 40px #3b82f622; }
 
         .pf-icon.grid-i {
-            background: radial-gradient(circle, #ef444444 0%, #ef444411 100%);
-            border: 2px solid #ef444466;
+            border: 2.5px solid #ef4444;
+            background: rgba(239, 68, 68, 0.05);
         }
-        .pf-icon.grid-i.active { box-shadow: 0 0 24px #ef444455, 0 0 48px #ef444422; }
+        .pf-icon.grid-i.active { box-shadow: 0 0 20px #ef444455, 0 0 40px #ef444422; }
 
         .pf-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
-        .pf-value { font-size: 1.15rem; font-weight: 700; }
-        .pf-detail { font-size: 0.7rem; color: #6b728099; text-align: center; line-height: 1.4; }
+        .pf-detail { font-size: 0.65rem; color: #6b728088; text-align: center; line-height: 1.3; }
 
         /* --- Fun facts --- */
         .fact {
@@ -916,16 +921,15 @@
             .money-sub-box { padding: 6px 4px !important; }
 
             /* --- Power Flow compact --- */
-            .pf-wrapper { height: 260px; }
-            .pf-icon { width: 36px; height: 36px; font-size: 1rem; }
+            .pf-wrapper { height: 320px; }
+            .pf-icon { width: 62px; height: 62px; }
+            .pf-emoji { font-size: 1rem; }
+            .pf-icon .pf-value { font-size: 0.65rem; }
             .pf-node { gap: 2px; }
             .pf-label { font-size: 0.55rem; }
-            .pf-value { font-size: 0.75rem; }
             .pf-detail { display: none; }
-            #pfSolar { left: 15% !important; }
-            #pfGrid { left: 85% !important; }
-            #pfBattery { left: 15% !important; }
-            #pfHome { left: 85% !important; }
+            #pfBattery { left: 12% !important; }
+            #pfGrid { left: 88% !important; }
 
             /* --- Bottom section compact --- */
             .bottom-section { padding: 0 8px 8px; }
@@ -1486,34 +1490,49 @@
             <div class="card-title">Power Flow</div>
             <div class="pf-wrapper" id="pfWrapper">
                 <canvas class="pf-canvas" id="pfCanvas"></canvas>
-                <div class="pf-node" id="pfSolar" style="top: 8px; left: 25%;">
-                    <div class="pf-icon solar-i" id="pfSolarIcon">&#9728;&#65039;</div>
+                <!-- Solar: top center -->
+                <div class="pf-node" id="pfSolar" style="top: 0; left: 50%; transform: translateX(-50%);">
+                    <div class="pf-icon solar-i" id="pfSolarIcon">
+                        <span class="pf-emoji">&#9728;&#65039;</span>
+                        <span class="pf-value" style="color:#f59e0b;" id="flowSolar">-- W</span>
+                    </div>
                     <div class="pf-label">Solar</div>
-                    <div class="pf-value" style="color:#f59e0b;" id="flowSolar">-- W</div>
                     <div class="pf-detail" id="flowSolarDetail">--V &middot; --A</div>
                 </div>
-                <div class="pf-node" id="pfGrid" style="top: 8px; left: 75%;">
-                    <div class="pf-icon grid-i" id="pfGridIcon">&#9187;</div>
-                    <div class="pf-label">Grid</div>
-                    <div class="pf-value" style="color:#ef4444;" id="flowGrid">-- W</div>
-                    <div class="pf-detail" id="flowGridDetail">--V &middot; --Hz</div>
+                <!-- Battery: left -->
+                <div class="pf-node" id="pfBattery" style="top: 50%; left: 10%; transform: translate(-50%, -50%);">
+                    <div class="pf-icon bat-i" id="pfBatIcon">
+                        <span class="pf-emoji">&#128267;</span>
+                        <span class="pf-value" style="color:#22c55e;" id="flowBattery">--%</span>
+                    </div>
+                    <div class="pf-label">Battery</div>
+                    <div class="pf-detail" id="flowBatDetail">--V &middot; --A</div>
                 </div>
-                <div class="pf-node" id="pfInverter" style="top: 50%; left: 50%; margin-top: -42px;">
-                    <div class="pf-icon inv-i" id="pfInvIcon">&#9889;</div>
+                <!-- Inverter: center -->
+                <div class="pf-node" id="pfInverter" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                    <div class="pf-icon inv-i" id="pfInvIcon">
+                        <span class="pf-emoji">&#9889;</span>
+                        <span class="pf-value" style="color:#a78bfa;" id="flowInverter">-- W</span>
+                    </div>
                     <div class="pf-label">Inverter</div>
-                    <div class="pf-value" style="color:#a78bfa;" id="flowInverter">-- W</div>
                     <div class="pf-detail" id="flowInvDetail">--&deg;C</div>
                 </div>
-                <div class="pf-node" id="pfBattery" style="bottom: 8px; left: 25%;">
-                    <div class="pf-icon bat-i" id="pfBatIcon">&#128267;</div>
-                    <div class="pf-label">Battery</div>
-                    <div class="pf-value" style="color:#22c55e;" id="flowBattery">--%</div>
-                    <div class="pf-detail" id="flowBatDetail">--V &middot; --A &middot; --W</div>
+                <!-- Grid: right -->
+                <div class="pf-node" id="pfGrid" style="top: 50%; left: 90%; transform: translate(-50%, -50%);">
+                    <div class="pf-icon grid-i" id="pfGridIcon">
+                        <span class="pf-emoji">&#9187;</span>
+                        <span class="pf-value" style="color:#ef4444;" id="flowGrid">-- W</span>
+                    </div>
+                    <div class="pf-label">Grid</div>
+                    <div class="pf-detail" id="flowGridDetail">--V &middot; --Hz</div>
                 </div>
-                <div class="pf-node" id="pfHome" style="bottom: 8px; left: 75%;">
-                    <div class="pf-icon home-i" id="pfHomeIcon">&#127968;</div>
+                <!-- Home: bottom center -->
+                <div class="pf-node" id="pfHome" style="bottom: 0; left: 50%; transform: translateX(-50%);">
+                    <div class="pf-icon home-i" id="pfHomeIcon">
+                        <span class="pf-emoji">&#127968;</span>
+                        <span class="pf-value" style="color:#3b82f6;" id="flowHome">-- W</span>
+                    </div>
                     <div class="pf-label">Home</div>
-                    <div class="pf-value" style="color:#3b82f6;" id="flowHome">-- W</div>
                     <div class="pf-detail" id="flowHomeDetail">L1: --W &middot; L2: --W</div>
                 </div>
             </div>
@@ -1943,74 +1962,97 @@
 
     function pfSpawnParticles(fromId, toId, color, count, speed) {
         const routeKey = fromId + ">" + toId;
-        pfParticles = pfParticles.filter(p => p.route !== routeKey);
         const from = pfNodeCenter(fromId), to = pfNodeCenter(toId);
-        if (count <= 0) return;
-        for (let i = 0; i < count; i++) {
-            pfParticles.push({
-                route: routeKey,
-                fx: from[0], fy: from[1], tx: to[0], ty: to[1],
-                progress: i / count,
-                speed, color,
-                // Each particle gets a random wobble phase so they don't all move identically
-                wobblePhase: Math.random() * Math.PI * 2,
-                wobbleSpeed: 2 + Math.random() * 3,
-            });
+
+        // Update existing particles on this route (positions, color, speed)
+        const existing = pfParticles.filter(p => p.route === routeKey);
+        existing.forEach(p => {
+            p.fx = from[0]; p.fy = from[1];
+            p.tx = to[0]; p.ty = to[1];
+            p.color = color; p.speed = speed;
+        });
+
+        if (count > existing.length) {
+            // Add new particles at random progress so they blend in
+            for (let i = 0; i < count - existing.length; i++) {
+                pfParticles.push({
+                    route: routeKey,
+                    fx: from[0], fy: from[1], tx: to[0], ty: to[1],
+                    progress: Math.random(),
+                    speed, color,
+                });
+            }
+        } else if (count < existing.length) {
+            // Remove excess particles (take from the end)
+            let toRemove = existing.length - count;
+            for (let i = pfParticles.length - 1; i >= 0 && toRemove > 0; i--) {
+                if (pfParticles[i].route === routeKey) {
+                    pfParticles.splice(i, 1);
+                    toRemove--;
+                }
+            }
         }
     }
 
     function pfDrawFrame() {
-        pfFrameCount++;
         const w = pfCanvas.width / devicePixelRatio;
         const h = pfCanvas.height / devicePixelRatio;
         pfCtx.clearRect(0, 0, w, h);
         pfCtx.lineCap = 'round';
-        pfCtx.lineJoin = 'round';
 
-        // Draw connection lines — subtle dashed line when active, very faint when not
+        // Draw sun arc path (faint dashed curve)
+        if (sunriseTime && sunsetTime) {
+            // Icon is 82px tall; center offset is ~41px from node top
+            const iconOffset = 41;
+            const arcHeight = 55;
+            pfCtx.beginPath();
+            for (let i = 0; i <= 60; i++) {
+                const t = i / 60;
+                const xPct = (15 + t * 70) / 100;
+                const x = xPct * w;
+                const y = (65 - arcHeight * Math.sin(t * Math.PI)) + iconOffset;
+                if (i === 0) pfCtx.moveTo(x, y);
+                else pfCtx.lineTo(x, y);
+            }
+            pfCtx.strokeStyle = '#f59e0b';
+            pfCtx.lineWidth = 0.8;
+            pfCtx.globalAlpha = 0.2;
+            pfCtx.setLineDash([4, 6]);
+            pfCtx.stroke();
+            pfCtx.setLineDash([]);
+            pfCtx.globalAlpha = 1;
+        }
+
+        // Draw connection lines — thin colored lines
         pfLines.forEach(l => {
             pfCtx.beginPath();
             pfCtx.moveTo(l.from[0], l.from[1]);
             pfCtx.lineTo(l.to[0], l.to[1]);
             pfCtx.strokeStyle = l.color;
-            pfCtx.lineWidth = l.active ? l.width : 1;
-            pfCtx.globalAlpha = l.active ? 0.25 : 0.1;
+            pfCtx.lineWidth = l.active ? 1.5 : 0.5;
+            pfCtx.globalAlpha = l.active ? 0.5 : 0.15;
             pfCtx.stroke();
             pfCtx.globalAlpha = 1;
         });
 
-        // Draw particles with electric glow and subtle wobble
+        // Draw particles — smooth dots flowing along the lines
         pfParticles.forEach(p => {
             p.progress += p.speed / 200;
             if (p.progress > 1) p.progress -= 1;
-            p.wobblePhase += p.wobbleSpeed * 0.05;
 
             const t = p.progress;
-            // Base position along the line
-            const baseX = p.fx + (p.tx - p.fx) * t;
-            const baseY = p.fy + (p.ty - p.fy) * t;
-
-            // Subtle perpendicular wobble to give an electric feel
-            const dx = p.tx - p.fx, dy = p.ty - p.fy;
-            const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            const perpX = -dy / len, perpY = dx / len;
-            const wobbleAmt = Math.sin(p.wobblePhase) * 3;
-            const x = baseX + perpX * wobbleAmt;
-            const y = baseY + perpY * wobbleAmt;
+            const x = p.fx + (p.tx - p.fx) * t;
+            const y = p.fy + (p.ty - p.fy) * t;
 
             // Fade in/out at endpoints
             const fade = Math.min(t * 6, (1 - t) * 6, 1);
 
-            // Outer glow
-            pfCtx.beginPath(); pfCtx.arc(x, y, 8, 0, Math.PI * 2);
-            pfCtx.fillStyle = p.color; pfCtx.globalAlpha = 0.1 * fade; pfCtx.fill();
-
-            // Mid glow
+            // Glow
             pfCtx.beginPath(); pfCtx.arc(x, y, 4, 0, Math.PI * 2);
-            pfCtx.fillStyle = p.color; pfCtx.globalAlpha = 0.5 * fade; pfCtx.fill();
+            pfCtx.fillStyle = p.color; pfCtx.globalAlpha = 0.3 * fade; pfCtx.fill();
 
-            // Bright core
-            pfCtx.beginPath(); pfCtx.arc(x, y, 1.8, 0, Math.PI * 2);
+            // Core dot
+            pfCtx.beginPath(); pfCtx.arc(x, y, 2, 0, Math.PI * 2);
             pfCtx.fillStyle = '#fff'; pfCtx.globalAlpha = 0.8 * fade; pfCtx.fill();
 
             pfCtx.globalAlpha = 1;
@@ -2038,26 +2080,66 @@
         setText("flowInverter", Math.round(loadPower) + " W");
 
         // Solar → Inverter
-        const solarActive = pvPower > 10;
-        pfLines[0].active = solarActive; pfLines[0].width = Math.min(2 + pvPower / 150, 6);
-        pfSpawnParticles("pfSolar", "pfInverter", "#f59e0b", solarActive ? Math.min(Math.ceil(pvPower / 150), 6) : 0, 0.8);
+        pfLines[0].active = pvPower > 10;
+        pfSpawnParticles("pfSolar", "pfInverter", "#f59e0b", pvPower > 10 ? Math.min(Math.ceil(pvPower / 200), 5) : 0, 0.6);
 
         // Grid ↔ Inverter
-        pfLines[1].active = Math.abs(gridPower) > 10; pfLines[1].width = Math.min(2 + Math.abs(gridPower) / 150, 6);
-        if (gridPower > 10) { pfLines[1].color = "#ef4444"; pfSpawnParticles("pfGrid", "pfInverter", "#ef4444", Math.min(Math.ceil(gridPower / 150), 5), 0.8); }
-        else if (gridPower < -10) { pfLines[1].color = "#3b82f6"; pfSpawnParticles("pfInverter", "pfGrid", "#3b82f6", Math.min(Math.ceil(Math.abs(gridPower) / 150), 5), 0.8); }
+        pfLines[1].active = Math.abs(gridPower) > 10;
+        if (gridPower > 10) { pfLines[1].color = "#ef4444"; pfSpawnParticles("pfGrid", "pfInverter", "#ef4444", Math.min(Math.ceil(gridPower / 200), 4), 0.6); }
+        else if (gridPower < -10) { pfLines[1].color = "#3b82f6"; pfSpawnParticles("pfInverter", "pfGrid", "#3b82f6", Math.min(Math.ceil(Math.abs(gridPower) / 200), 4), 0.6); }
         else { pfSpawnParticles("pfGrid", "pfInverter", "#ef4444", 0, 0); }
 
-        // Inverter ↔ Battery (negative = discharging)
-        const discharging = batteryPower < -10, charging = batteryPower > 10;
-        pfLines[2].active = charging || discharging; pfLines[2].width = Math.min(2 + Math.abs(batteryPower) / 150, 6);
-        if (charging) pfSpawnParticles("pfInverter", "pfBattery", "#22c55e", Math.min(Math.ceil(Math.abs(batteryPower) / 150), 5), 0.7);
-        else if (discharging) pfSpawnParticles("pfBattery", "pfInverter", "#22c55e", Math.min(Math.ceil(Math.abs(batteryPower) / 150), 5), 0.7);
+        // Inverter ↔ Battery
+        pfLines[2].active = Math.abs(batteryPower) > 10;
+        if (batteryPower > 10) pfSpawnParticles("pfInverter", "pfBattery", "#22c55e", Math.min(Math.ceil(batteryPower / 200), 4), 0.5);
+        else if (batteryPower < -10) pfSpawnParticles("pfBattery", "pfInverter", "#22c55e", Math.min(Math.ceil(Math.abs(batteryPower) / 200), 4), 0.5);
         else pfSpawnParticles("pfInverter", "pfBattery", "#22c55e", 0, 0);
 
         // Inverter → Home
-        pfLines[3].active = loadPower > 10; pfLines[3].width = Math.min(2 + loadPower / 150, 6);
-        pfSpawnParticles("pfInverter", "pfHome", "#3b82f6", loadPower > 10 ? Math.min(Math.ceil(loadPower / 150), 6) : 0, 0.8);
+        pfLines[3].active = loadPower > 10;
+        pfSpawnParticles("pfInverter", "pfHome", "#3b82f6", loadPower > 10 ? Math.min(Math.ceil(loadPower / 200), 5) : 0, 0.6);
+
+        updateSunPosition();
+    }
+
+    function updateSunPosition() {
+        const node = document.getElementById("pfSolar");
+        const emoji = document.querySelector("#pfSolarIcon .pf-emoji");
+        const icon = document.getElementById("pfSolarIcon");
+        const label = node ? node.querySelector(".pf-label") : null;
+        if (!node || !emoji || !icon) return;
+
+        // sunriseTime and sunsetTime are set by the weather handler
+        if (!sunriseTime || !sunsetTime) return;
+
+        const now = new Date();
+        const isDaytime = now >= sunriseTime && now <= sunsetTime;
+
+        if (isDaytime) {
+            // t = 0 at sunrise, 0.5 at solar noon, 1 at sunset
+            const t = (now - sunriseTime) / (sunsetTime - sunriseTime);
+
+            // Arc across the top: x from 15% (sunrise) to 85% (sunset)
+            const x = 15 + t * 70;
+            // y follows a sine curve — highest (lowest number) at noon
+            const arcHeight = 55;
+            const y = 65 - arcHeight * Math.sin(t * Math.PI);
+
+            node.style.top = y + "px";
+            node.style.left = x + "%";
+            emoji.innerHTML = "&#9728;&#65039;";
+            icon.className = "pf-icon solar-i" + (icon.classList.contains("active") ? " active" : "");
+            if (label) label.textContent = "SOLAR";
+        } else {
+            // Night — moon at center top
+            node.style.top = "5px";
+            node.style.left = "50%";
+            emoji.innerHTML = "&#127769;";
+            // Switch to a subtle night style (reuse grid blue tones)
+            icon.style.borderColor = "#6366f1";
+            icon.style.background = "rgba(99, 102, 241, 0.05)";
+            if (label) label.textContent = "NIGHT";
+        }
     }
 
     pfResize();
@@ -3438,6 +3520,8 @@
 
 <div class="uptime-footer">
     Server uptime: <span id="uptimeValue">--</span>
+    <br>
+    <span style="opacity: 0.4; font-size: 0.65rem;">&copy; 2026 Gino Varisano</span>
 </div>
 
 </body>
