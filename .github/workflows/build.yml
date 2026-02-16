@@ -39,14 +39,14 @@ jobs:
       - name: Build (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          pyinstaller --onefile --add-data "templates:templates" --name SolarDashboard app.py
+          pyinstaller --onefile --add-data "templates:templates" --hidden-import=engineio.async_drivers.threading --hidden-import=engineio.async_threading --name SolarDashboard app.py
           cd dist && zip SolarDashboard${{ matrix.suffix }}.zip SolarDashboard
 
       # Windows uses ; as the path separator
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
-          pyinstaller --onefile --add-data "templates;templates" --name SolarDashboard app.py
+          pyinstaller --onefile --add-data "templates;templates" --hidden-import=engineio.async_drivers.threading --hidden-import=engineio.async_threading --name SolarDashboard app.py
           Compress-Archive -Path dist\SolarDashboard.exe -DestinationPath dist\SolarDashboard${{ matrix.suffix }}.zip
 
       - name: Upload artifact
