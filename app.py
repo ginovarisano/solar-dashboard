@@ -129,7 +129,7 @@ def apply_nilm_settings():
 
 def _sa_grafana_url():
     """Build the SA Grafana URL from current settings."""
-    host = get_setting("sa_host", "192.168.1.252")
+    host = get_setting("sa_host", "")
     return f"http://{host}/grafana/api/datasources/proxy/1/query"
 
 # Database file lives next to the executable (not in the temp bundle)
@@ -236,7 +236,7 @@ def sa_login():
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
     # Just hit the root — SA auto-redirects through /sign_in and sets session cookie
     try:
-        opener.open(f"http://{get_setting('sa_host', '192.168.1.252')}/", timeout=10)
+        opener.open(f"http://{get_setting('sa_host', '')}/", timeout=10)
     except Exception:
         pass
     # Extract the cookie string
@@ -490,8 +490,8 @@ def fetch_weather():
     """Fetch current weather from Open-Meteo (free, no API key needed)."""
     global latest_weather
     try:
-        lat = get_setting("location_lat", "39.72317")
-        lon = get_setting("location_lon", "-74.84905")
+        lat = get_setting("location_lat", "")
+        lon = get_setting("location_lon", "")
         tz = get_setting("timezone", "America/New_York")
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
@@ -647,7 +647,7 @@ def fetch_weather():
             })
 
         latest_weather = {
-            "location": get_setting("location_name", "Waterford Works, NJ"),
+            "location": get_setting("location_name", ""),
             "temp_f": current.get("temperature_2m"),
             "feels_like_f": current.get("apparent_temperature"),
             "humidity": current.get("relative_humidity_2m"),
@@ -1304,7 +1304,7 @@ def api_nilm_reanalyze():
 def start_mqtt():
     """Connect to MQTT broker using current settings."""
     global _mqtt_client
-    broker = get_setting("mqtt_broker", "192.168.1.252")
+    broker = get_setting("mqtt_broker", "")
     port = get_setting_int("mqtt_port", 1883)
     user = get_setting("mqtt_user", "")
     passwd = get_setting("mqtt_pass", "")
