@@ -6,6 +6,9 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -13,13 +16,13 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Linux
-            artifact: SolarDashboard-Linux
+            suffix: "-Linux"
           - os: macos-latest
             name: macOS
-            artifact: SolarDashboard-macOS
+            suffix: "-macOS"
           - os: windows-latest
             name: Windows
-            artifact: SolarDashboard-Windows
+            suffix: "-Windows"
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,17 +38,21 @@ jobs:
       # Linux and macOS use : as the path separator
       - name: Build (Linux/macOS)
         if: runner.os != 'Windows'
-        run: pyinstaller --onefile --add-data "templates:templates" --name SolarDashboard app.py
+        run: |
+          pyinstaller --onefile --add-data "templates:templates" --name SolarDashboard app.py
+          mv dist/SolarDashboard dist/SolarDashboard${{ matrix.suffix }}
 
       # Windows uses ; as the path separator
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        run: pyinstaller --onefile --add-data "templates;templates" --name SolarDashboard app.py
+        run: |
+          pyinstaller --onefile --add-data "templates;templates" --name SolarDashboard app.py
+          ren dist\SolarDashboard.exe SolarDashboard${{ matrix.suffix }}.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: SolarDashboard${{ matrix.suffix }}
           path: dist/
 
       # Attach to the release if triggered by a release
@@ -54,3 +61,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          tag_name: ${{ github.event.release.tag_name }}
