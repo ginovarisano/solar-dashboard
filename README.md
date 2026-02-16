@@ -49,6 +49,16 @@ On first run, a **setup wizard** will appear asking for:
 
 After completing the wizard, the dashboard will connect to Solar Assistant and start displaying live data.
 
+### Access from your phone
+
+The dashboard is mobile-friendly. To view it on your phone or tablet, make sure the device is on the same Wi-Fi network as the computer running the dashboard, then open:
+
+```
+http://<COMPUTER_IP>:5050
+```
+
+Replace `<COMPUTER_IP>` with the local IP address of the computer running the dashboard (e.g. `192.168.1.50`). You can find this in your computer's network settings or router device list.
+
 ## Configuration
 
 All settings are stored in a local SQLite database (`solar_history.db`, created automatically on first run). You can change settings at any time by clicking the gear icon in the dashboard or visiting `http://localhost:5050/setup`.
