@@ -2,6 +2,10 @@
 
 A real-time web dashboard for [Solar Assistant](https://solar-assistant.io/) users. Monitor your solar production, battery status, grid usage, weather conditions, and more — all from a single page in your browser.
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee)](https://buymeacoffee.com/ginovarisano)
+
+**Free and open source** — if you find it useful, consider [buying me a coffee](https://buymeacoffee.com/ginovarisano)!
+
 ## Features
 
 - **Live monitoring** — PV power, load, battery SOC, grid power updated in real time via MQTT
@@ -21,7 +25,7 @@ A real-time web dashboard for [Solar Assistant](https://solar-assistant.io/) use
 
 1. **Clone or download** this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/solar-dashboard.git
+   git clone https://github.com/ginovarisano/solar-dashboard.git
    cd solar-dashboard
    ```
 
