@@ -282,6 +282,25 @@
             </div>
         </div>
 
+        <!-- Section 4: Battery Capacity -->
+        <div class="section">
+            <div class="section-header">
+                <span class="section-number">4</span>
+                <span class="section-title">Battery Capacity</span>
+            </div>
+            <p class="section-hint">
+                Your total battery bank size in kilowatt-hours. This is used to calculate
+                charge/discharge rate and time remaining. Leave at 0 to auto-detect (works
+                best for smaller systems under 30 kWh).
+            </p>
+            <div class="form-row">
+                <div class="form-group" style="max-width: 200px;">
+                    <label for="battery_capacity_kwh">Capacity (kWh)</label>
+                    <input type="text" id="battery_capacity_kwh" placeholder="0" value="{{ (settings.battery_capacity_wh | int / 1000) if settings.battery_capacity_wh | int > 0 else '' }}">
+                </div>
+            </div>
+        </div>
+
         <!-- Save button -->
         <button class="launch-btn" id="saveBtn" onclick="saveSetup()">
             Save &amp; Launch Dashboard
@@ -359,7 +378,8 @@
                 location_lon: document.getElementById('location_lon').value.trim(),
                 location_name: document.getElementById('location_name').value.trim(),
                 timezone: document.getElementById('timezone').value.trim() || 'America/New_York',
-                electricity_rate: document.getElementById('electricity_rate').value.trim() || '0.30'
+                electricity_rate: document.getElementById('electricity_rate').value.trim() || '0.30',
+                battery_capacity_wh: String(Math.round((parseFloat(document.getElementById('battery_capacity_kwh').value.trim()) || 0) * 1000))
             };
 
             // Send to server

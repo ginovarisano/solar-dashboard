@@ -42,10 +42,10 @@ A real-time web dashboard for [Solar Assistant](https://solar-assistant.io/) use
 4. **Open your browser** to `http://localhost:5050`
 
 On first run, a **setup wizard** will appear asking for:
-- Your Solar Assistant IP address (for MQTT and InfluxDB data)
-- MQTT credentials (if you've set them in Solar Assistant)
-- Your location (for weather forecasts)
-- Your electricity rate (for savings calculations)
+- **Solar Assistant IP address** — this is the same IP you use to open Solar Assistant in your browser (e.g. `192.168.1.100`). You can find it in your router's device list — it usually shows up as "solar-assistant". This is used for both MQTT and InfluxDB data.
+- **MQTT credentials** — only needed if you've set a username/password in Solar Assistant under Settings → MQTT. If you haven't changed this, leave it blank.
+- **Your location** — for weather forecasts
+- **Your electricity rate** — for savings calculations
 
 After completing the wizard, the dashboard will connect to Solar Assistant and start displaying live data.
 

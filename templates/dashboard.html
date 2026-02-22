@@ -1217,7 +1217,7 @@
                 <!-- Battery -->
                 <div class="settings-section">
                     <h3>Battery</h3>
-                    <label>Battery Capacity (Wh) <input type="number" id="set_battery_capacity_wh" placeholder="0"><span class="settings-hint">0 = auto-detect from voltage</span></label>
+                    <label>Battery Capacity (kWh) <input type="number" id="set_battery_capacity_wh" step="0.1" placeholder="0"><span class="settings-hint">e.g. 5 for 5kWh, 48 for 48kWh. 0 = auto-detect</span></label>
                     <label>Inverter Idle Load (W) <input type="number" id="set_inverter_idle_load" placeholder="70"><span class="settings-hint">Watts drawn when nothing else is on</span></label>
                 </div>
                 <!-- NILM / Advanced -->
@@ -1363,6 +1363,9 @@
             </div>
             <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 2px;">
                 <span id="batteryTimeRemaining">—</span>
+            </div>
+            <div style="font-size: 0.6rem; color: #4b5563; margin-top: 2px;">
+                <span id="batteryCapacityInfo"></span>
             </div>
         </div>
 
@@ -2174,13 +2177,16 @@
     let lastSoc = null, lastSocTime = 0;
     // Learned capacity in Wh — stored in localStorage so it improves over time
     let learnedCapacityWh = parseFloat(localStorage.getItem('batCapacityWh')) || 0;
-    let capacityAccum = [];  // [{wh: number, dsoc: number}] observations for learning
+    let capacityAccum = [];  // observations for learning
+    let userSetCapacityWh = 0;  // set from settings — overrides auto-learning
+    let capacitySource = "estimated";  // "user", "learned", or "estimated"
 
     function updateBatteryRate(soc, power) {
         const now = Date.now();
 
         // --- Learn battery capacity from SOC + power observations ---
-        if (lastSoc !== null && lastSocTime > 0) {
+        // Only auto-learn if user hasn't set a capacity in settings
+        if (userSetCapacityWh === 0 && lastSoc !== null && lastSocTime > 0) {
             const dtHours = (now - lastSocTime) / 3600000;
             const dsoc = soc - lastSoc;
             // Only learn when there's a meaningful SOC change and consistent power
@@ -2188,8 +2194,8 @@
                 const avgP = batPowerSamples.reduce((a, b) => a + b, 0) / batPowerSamples.length;
                 const whUsed = Math.abs(avgP) * dtHours;
                 const impliedCapacity = whUsed / (Math.abs(dsoc) / 100);
-                // Sanity check — typical home batteries are 1-20 kWh
-                if (impliedCapacity > 500 && impliedCapacity < 30000) {
+                // Sanity check — supports systems from 500 Wh up to 60 kWh
+                if (impliedCapacity > 500 && impliedCapacity < 60000) {
                     capacityAccum.push(impliedCapacity);
                     // Average over recent observations (keep last 20)
                     if (capacityAccum.length > 20) capacityAccum.shift();
@@ -2214,13 +2220,19 @@
 
         const avgPower = batPowerSamples.reduce((a, b) => a + b, 0) / batPowerSamples.length;
 
-        // --- Calculate %/hr from current power ---
-        // Use learned capacity, or estimate from battery voltage if not learned yet
-        let capacityWh = learnedCapacityWh;
-        if (capacityWh < 500) {
-            // Rough estimate: most 48V systems are ~5kWh, 24V ~2.4kWh
+        // --- Determine battery capacity (priority: user setting > learned > voltage estimate) ---
+        let capacityWh;
+        if (userSetCapacityWh > 0) {
+            capacityWh = userSetCapacityWh;
+            capacitySource = "user";
+        } else if (learnedCapacityWh >= 500) {
+            capacityWh = learnedCapacityWh;
+            capacitySource = "learned";
+        } else {
+            // Rough estimate from battery voltage as last resort
             const v = parseFloat(document.getElementById("batteryVoltage").textContent) || 48;
             capacityWh = v > 40 ? 5000 : v > 20 ? 2400 : 1200;
+            capacitySource = "estimated";
         }
 
         // rate = power / capacity * 100 (%/hr)
@@ -2260,6 +2272,15 @@
             }
             if (trEl) trEl.style.color = ratePerHour > 0 ? "#22c55e" : "#f59e0b";
         }
+
+        // Show active capacity and its source
+        const kwh = (capacityWh / 1000).toFixed(1);
+        const sourceLabel = capacitySource === "user" ? "" :
+                            capacitySource === "learned" ? " (auto-learned)" : " (estimated)";
+        const capEl = document.getElementById("batteryCapacityInfo");
+        setText("batteryCapacityInfo", kwh + " kWh" + sourceLabel);
+        if (capEl && capacitySource === "estimated") capEl.style.color = "#f59e0b";
+        else if (capEl) capEl.style.color = "#4b5563";
     }
 
     // =====================================================
@@ -3334,7 +3355,14 @@
             const settings = await res.json();
             SETTINGS_KEYS.forEach(key => {
                 const el = document.getElementById("set_" + key);
-                if (el) el.value = settings[key] || "";
+                if (!el) return;
+                // Show battery capacity in kWh (stored internally as Wh)
+                if (key === "battery_capacity_wh") {
+                    const wh = parseFloat(settings[key]) || 0;
+                    el.value = wh > 0 ? (wh / 1000).toFixed(1) : "";
+                } else {
+                    el.value = settings[key] || "";
+                }
             });
         } catch (err) { console.error("Load settings error:", err); }
     }
@@ -3343,7 +3371,14 @@
         const data = {};
         SETTINGS_KEYS.forEach(key => {
             const el = document.getElementById("set_" + key);
-            if (el) data[key] = el.value;
+            if (!el) return;
+            // Convert kWh input to Wh for storage
+            if (key === "battery_capacity_wh") {
+                const kwh = parseFloat(el.value) || 0;
+                data[key] = String(Math.round(kwh * 1000));
+            } else {
+                data[key] = el.value;
+            }
         });
         const statusEl = document.getElementById("settingsStatus");
         try {
@@ -3376,7 +3411,7 @@
             const data = await res.json();
             if (data.rate) RATE = parseFloat(data.rate);
             if (data.battery_capacity_wh > 0) {
-                learnedCapacityWh = data.battery_capacity_wh;
+                userSetCapacityWh = data.battery_capacity_wh;
             }
         } catch (err) { console.error("Settings rate load error:", err); }
     }
