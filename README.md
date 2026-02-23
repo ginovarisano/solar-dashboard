@@ -12,6 +12,7 @@ A real-time web dashboard for [Solar Assistant](https://solar-assistant.io/) use
 - **24-hour power charts** — Interactive charts showing PV, load, and battery power throughout the day
 - **Energy history** — Daily, monthly, and yearly production/consumption tracking
 - **Weather integration** — Current conditions, forecast, sunshine hours, and solar production estimates (via Open-Meteo, no API key needed)
+- **Multi-inverter support** — Automatically detects and aggregates data from multiple inverters in parallel (e.g. 3x EG4-6000XP). No configuration needed — single-inverter setups work identically.
 - **Appliance detection (NILM)** — Automatically identifies appliances from your total load signal using edge detection. Learns and remembers signatures across reboots.
 - **Fun stats** — All-time solar production with equivalents (CO2 saved, EV miles, iPhone charges, etc.)
 - **Setup wizard** — First-run wizard walks you through configuration — no file editing needed
@@ -91,6 +92,8 @@ The dashboard includes built-in appliance detection that identifies devices from
 ## MQTT Topics
 
 The dashboard subscribes to `solar_assistant/#` and maps standard Solar Assistant topics automatically. It works with the default topic structure that Solar Assistant publishes — no extra configuration needed.
+
+For systems with multiple inverters, power fields (`pv_power`, `load_power`, `grid_power`, `load_apparent_power`, `battery_current`) are automatically summed across all `inverter_N/` topics. Non-additive fields like voltage, frequency, and temperature use inverter 1's values. Energy totals come from Solar Assistant's pre-aggregated `total/` topics.
 
 ## Debug Tool
 
