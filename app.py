@@ -12,6 +12,7 @@ from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
 from datetime import datetime, timedelta
 import json
+import re
 import threading
 import sqlite3
 import os
@@ -150,6 +151,9 @@ history = {
 }
 MAX_HISTORY = 120
 
+# Per-inverter values for aggregation (e.g. {"pv_power": {1: 500, 2: 480}, ...})
+_inverter_data = {}
+
 # Track session energy
 daily_tracker = {
     "date": datetime.now().strftime("%Y-%m-%d"),
@@ -160,28 +164,33 @@ daily_tracker = {
 # Latest weather data (updated every 10 minutes)
 latest_weather = {}
 
-# Map MQTT topics to friendly names
-TOPIC_MAP = {
-    "inverter_1/pv_power/state": "pv_power",
-    "inverter_1/pv_power_1/state": "pv_power_1",
-    "inverter_1/pv_power_2/state": "pv_power_2",
-    "inverter_1/pv_voltage_1/state": "pv_voltage_1",
-    "inverter_1/pv_voltage_2/state": "pv_voltage_2",
-    "inverter_1/pv_current_1/state": "pv_current_1",
-    "inverter_1/load_power/state": "load_power",
-    "inverter_1/load_power_1/state": "load_power_1",
-    "inverter_1/load_power_2/state": "load_power_2",
-    "inverter_1/load_percentage/state": "load_percentage",
-    "inverter_1/load_apparent_power/state": "load_apparent_power",
-    "inverter_1/battery_voltage/state": "battery_voltage",
-    "inverter_1/battery_current/state": "battery_current",
-    "inverter_1/grid_power/state": "grid_power",
-    "inverter_1/grid_voltage/state": "grid_voltage",
-    "inverter_1/grid_frequency/state": "grid_frequency",
-    "inverter_1/temperature/state": "inverter_temp",
-    "inverter_1/device_mode/state": "device_mode",
-    "inverter_1/ac_output_frequency/state": "ac_frequency",
-    "inverter_1/output_source_priority/state": "output_priority",
+# Map the suffix after "inverter_N/" to friendly names.
+# Works for ANY inverter number (1, 2, 3, ...).
+INVERTER_TOPIC_MAP = {
+    "pv_power/state": "pv_power",
+    "pv_power_1/state": "pv_power_1",
+    "pv_power_2/state": "pv_power_2",
+    "pv_voltage_1/state": "pv_voltage_1",
+    "pv_voltage_2/state": "pv_voltage_2",
+    "pv_current_1/state": "pv_current_1",
+    "load_power/state": "load_power",
+    "load_power_1/state": "load_power_1",
+    "load_power_2/state": "load_power_2",
+    "load_percentage/state": "load_percentage",
+    "load_apparent_power/state": "load_apparent_power",
+    "battery_voltage/state": "battery_voltage",
+    "battery_current/state": "battery_current",
+    "grid_power/state": "grid_power",
+    "grid_voltage/state": "grid_voltage",
+    "grid_frequency/state": "grid_frequency",
+    "temperature/state": "inverter_temp",
+    "device_mode/state": "device_mode",
+    "ac_output_frequency/state": "ac_frequency",
+    "output_source_priority/state": "output_priority",
+}
+
+# "total/" topics — already aggregated by Solar Assistant
+TOTAL_TOPIC_MAP = {
     "total/battery_state_of_charge/state": "battery_soc",
     "total/battery_power/state": "battery_power",
     "total/bus_voltage/state": "bus_voltage",
@@ -192,6 +201,13 @@ TOPIC_MAP = {
     "total/battery_energy_in/state": "battery_energy_in",
     "total/battery_energy_out/state": "battery_energy_out",
 }
+
+# Fields that should be SUMMED across all inverters (power is additive).
+# Everything else (voltage, frequency, temp, mode, per-MPPT) uses inverter_1 only.
+SUM_FIELDS = {"pv_power", "load_power", "grid_power", "load_apparent_power", "battery_current"}
+
+# Regex to extract inverter number and suffix from topics like "inverter_3/pv_power/state"
+_INVERTER_RE = re.compile(r"^inverter_(\d+)/(.+)$")
 
 # WMO weather code descriptions
 WMO_CODES = {
@@ -927,9 +943,36 @@ def on_message(client, userdata, message):
     topic = message.topic.replace("solar_assistant/", "")
     value = message.payload.decode("utf-8")
 
-    friendly = TOPIC_MAP.get(topic, None)
+    # --- Resolve topic to a friendly name ---
+    # 1) Check "total/" topics first (already aggregated by Solar Assistant)
+    friendly = TOTAL_TOPIC_MAP.get(topic)
+
     if friendly is None:
-        return
+        # 2) Try to match inverter_N/suffix pattern
+        m = _INVERTER_RE.match(topic)
+        if m:
+            inv_num = int(m.group(1))   # e.g. 1, 2, 3
+            suffix = m.group(2)         # e.g. "pv_power/state"
+            friendly = INVERTER_TOPIC_MAP.get(suffix)
+            if friendly is None:
+                return  # Unknown inverter suffix, ignore
+
+            try:
+                value = float(value)
+            except ValueError:
+                pass
+
+            # For SUM_FIELDS: store per-inverter value and sum across all
+            if friendly in SUM_FIELDS and isinstance(value, (int, float)):
+                if friendly not in _inverter_data:
+                    _inverter_data[friendly] = {}
+                _inverter_data[friendly][inv_num] = value
+                value = sum(_inverter_data[friendly].values())
+            elif inv_num != 1:
+                # Non-summable fields (voltage, freq, temp): only use inverter_1
+                return
+        else:
+            return  # Not a total/ or inverter_N/ topic we care about
 
     try:
         value = float(value)
