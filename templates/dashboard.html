@@ -6,31 +6,62 @@
     <title>Solar Dashboard</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
     <style>
+        /* --- Theme variables --- */
+        :root {
+            --bg-body: #0a0e27;
+            --bg-card-1: #111640;
+            --bg-card-2: #0d1030;
+            --bg-header-1: #0d1140;
+            --bg-header-2: #1a1a4e;
+            --bg-inset: rgba(10, 14, 39, 0.6);
+            --bg-input: #0a0e27;
+            --text-primary: #e0e0e0;
+            --text-secondary: #6b7280;
+            --text-muted: #4b5563;
+            --border-subtle: rgba(255,255,255,0.03);
+            --border-light: rgba(255,255,255,0.06);
+            --border-medium: rgba(255,255,255,0.08);
+            --accent: #f59e0b;
+            --accent-light: #fbbf24;
+            --accent-dark: #d97706;
+            --color-solar: #f59e0b;
+            --color-battery: #22c55e;
+            --color-load: #3b82f6;
+            --color-grid: #ef4444;
+            --color-inverter: #a78bfa;
+            --card-shadow: rgba(0,0,0,0.3);
+        }
+
+        /* --- Font size scaling --- */
+        html.font-small { font-size: 13px; }
+        html.font-large { font-size: 18px; }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0e27;
-            color: #e0e0e0;
+            background: var(--bg-body);
+            color: var(--text-primary);
             min-height: 100vh;
         }
 
         /* --- Header bar --- */
         .header {
-            background: linear-gradient(135deg, #0d1140 0%, #1a1a4e 100%);
+            background: linear-gradient(135deg, var(--bg-header-1) 0%, var(--bg-header-2) 100%);
             padding: 10px 24px;
             display: flex;
             align-items: center;
             gap: 16px;
-            border-bottom: 1px solid #f59e0b33;
+            border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
             font-size: 0.8rem;
             flex-wrap: wrap;
         }
 
         .header h1 {
             font-size: 1.2rem;
-            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-right: 8px;
@@ -57,7 +88,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.75rem;
             margin-left: auto;
         }
@@ -67,7 +98,7 @@
             align-items: center;
             gap: 6px;
             font-size: 0.75rem;
-            color: #6b7280;
+            color: var(--text-secondary);
         }
 
         .status-dot {
@@ -96,18 +127,18 @@
         }
 
         .card {
-            background: linear-gradient(145deg, #111640 0%, #0d1030 100%);
+            background: linear-gradient(145deg, var(--bg-card-1) 0%, var(--bg-card-2) 100%);
             border-radius: 14px;
             padding: 14px 18px;
-            border: 1px solid #ffffff10;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-light);
+            box-shadow: 0 4px 20px var(--card-shadow);
         }
 
         .card-title {
             font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #6b7280;
+            color: var(--text-secondary);
             margin-bottom: 8px;
         }
 
@@ -185,16 +216,16 @@
         }
         .pf-icon.grid-i.active { box-shadow: 0 0 20px #ef444455, 0 0 40px #ef444422; }
 
-        .pf-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
-        .pf-detail { font-size: 0.65rem; color: #6b728088; text-align: center; line-height: 1.3; }
+        .pf-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+        .pf-detail { font-size: 0.65rem; color: color-mix(in srgb, var(--text-secondary) 53%, transparent); text-align: center; line-height: 1.3; }
 
         /* --- Fun facts --- */
         .fact {
-            background: #0a0e2799;
+            background: var(--bg-inset);
             border-radius: 10px;
             padding: 12px;
             text-align: center;
-            border: 1px solid #ffffff08;
+            border: 1px solid var(--border-medium);
         }
 
         .facts-grid {
@@ -204,8 +235,8 @@
         }
 
         .fact-icon { font-size: 1.4rem; margin-bottom: 4px; }
-        .fact-value { font-size: 1.2rem; font-weight: 700; color: #fbbf24; }
-        .fact-label { font-size: 0.7rem; color: #6b7280; margin-top: 2px; }
+        .fact-value { font-size: 1.2rem; font-weight: 700; color: var(--accent-light); }
+        .fact-label { font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px; }
 
         /* --- Bottom section (stats + history) --- */
         .bottom-section {
@@ -215,11 +246,11 @@
         }
 
         .bottom-card {
-            background: linear-gradient(145deg, #111640 0%, #0d1030 100%);
+            background: linear-gradient(145deg, var(--bg-card-1) 0%, var(--bg-card-2) 100%);
             border-radius: 14px;
             padding: 20px;
-            border: 1px solid #ffffff10;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-light);
+            box-shadow: 0 4px 20px var(--card-shadow);
         }
 
         .tab-bar {
@@ -230,9 +261,9 @@
 
         .tab-btn {
             padding: 6px 16px;
-            border: 1px solid #ffffff15;
-            background: #0a0e27;
-            color: #6b7280;
+            border: 1px solid var(--border-medium);
+            background: var(--bg-body);
+            color: var(--text-secondary);
             border-radius: 8px;
             cursor: pointer;
             font-size: 0.8rem;
@@ -240,12 +271,12 @@
             transition: all 0.2s;
         }
 
-        .tab-btn:hover { color: #e0e0e0; border-color: #ffffff30; }
+        .tab-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.19); }
 
         .tab-btn.active {
-            background: linear-gradient(135deg, #f59e0b33, #f59e0b11);
-            color: #f59e0b;
-            border-color: #f59e0b55;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent) 7%, transparent));
+            color: var(--accent);
+            border-color: color-mix(in srgb, var(--accent) 33%, transparent);
         }
 
         .history-chart-container {
@@ -262,20 +293,20 @@
         .history-table th {
             text-align: left;
             padding: 8px 10px;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            border-bottom: 1px solid #ffffff10;
+            border-bottom: 1px solid var(--border-light);
         }
 
         .history-table td {
             padding: 8px 10px;
             font-size: 0.8rem;
-            border-bottom: 1px solid #ffffff08;
+            border-bottom: 1px solid var(--border-subtle);
         }
 
-        .history-table tr:hover td { background: #ffffff05; }
+        .history-table tr:hover td { background: rgba(255,255,255,0.02); }
         .history-table .pv-col { color: #f59e0b; font-weight: 600; }
         .history-table .load-col { color: #3b82f6; font-weight: 600; }
         .history-table .grid-col { color: #ef4444; }
@@ -285,7 +316,7 @@
 
         .history-note {
             text-align: center;
-            color: #4b5563;
+            color: var(--text-muted);
             font-size: 0.75rem;
             margin-top: 12px;
             font-style: italic;
@@ -397,17 +428,17 @@
         }
 
         .nilm-panel {
-            background: #0a0e2799;
+            background: var(--bg-inset);
             border-radius: 10px;
             padding: 14px;
-            border: 1px solid #ffffff08;
+            border: 1px solid var(--border-medium);
         }
 
         .nilm-panel-title {
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #6b7280;
+            color: var(--text-secondary);
             margin-bottom: 10px;
             font-weight: 600;
         }
@@ -418,9 +449,9 @@
             gap: 10px;
             padding: 8px 10px;
             border-radius: 8px;
-            background: #ffffff05;
+            background: rgba(255,255,255,0.02);
             margin-bottom: 6px;
-            border: 1px solid #ffffff08;
+            border: 1px solid var(--border-medium);
         }
 
         .nilm-active-icon { font-size: 1.3rem; }
@@ -429,7 +460,7 @@
 
         .nilm-active-label { font-size: 0.85rem; font-weight: 600; }
 
-        .nilm-active-detail { font-size: 0.7rem; color: #6b7280; }
+        .nilm-active-detail { font-size: 0.7rem; color: var(--text-secondary); }
 
         .nilm-active-power {
             font-size: 1rem;
@@ -628,8 +659,8 @@
         /* --- Settings gear button --- */
         .settings-gear-btn {
             background: none;
-            border: 1px solid #ffffff15;
-            color: #6b7280;
+            border: 1px solid var(--border-medium);
+            color: var(--text-secondary);
             cursor: pointer;
             padding: 5px 7px;
             border-radius: 8px;
@@ -638,13 +669,13 @@
             transition: all 0.2s;
             margin-left: 8px;
         }
-        .settings-gear-btn:hover { color: #f59e0b; border-color: #f59e0b55; }
+        .settings-gear-btn:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 33%, transparent); }
 
         /* --- Night Mode --- */
         .night-toggle-btn {
             background: none;
-            border: 1px solid #ffffff15;
-            color: #6b7280;
+            border: 1px solid var(--border-medium);
+            color: var(--text-secondary);
             cursor: pointer;
             padding: 5px 7px;
             border-radius: 8px;
@@ -707,18 +738,18 @@
         .night-clock-time {
             font-size: 3rem;
             font-weight: 700;
-            color: #e0e0e0;
+            color: var(--text-primary);
             letter-spacing: 2px;
             line-height: 1;
         }
         .night-clock-date {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--text-secondary);
             margin-top: 4px;
         }
         .clock-weather-line {
             font-size: 0.8rem;
-            color: #6b7280;
+            color: var(--text-secondary);
             margin-top: 2px;
         }
 
@@ -727,8 +758,8 @@
 
         .setup-wizard-btn {
             background: none;
-            border: 1px solid #ffffff15;
-            color: #6b7280;
+            border: 1px solid var(--border-medium);
+            color: var(--text-secondary);
             cursor: pointer;
             padding: 5px 10px;
             border-radius: 8px;
@@ -740,7 +771,7 @@
             align-items: center;
             gap: 4px;
         }
-        .setup-wizard-btn:hover { color: #f59e0b; border-color: #f59e0b55; }
+        .setup-wizard-btn:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 33%, transparent); }
 
         /* --- Settings overlay + panel --- */
         .settings-overlay {
@@ -757,8 +788,8 @@
             width: 400px;
             max-width: 90vw;
             height: 100vh;
-            background: linear-gradient(180deg, #0d1140 0%, #0a0e27 100%);
-            border-left: 1px solid #f59e0b33;
+            background: linear-gradient(180deg, var(--bg-header-1) 0%, var(--bg-body) 100%);
+            border-left: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
             display: flex;
             flex-direction: column;
             animation: slideIn 0.25s ease-out;
@@ -774,17 +805,17 @@
         }
         .settings-header h2 {
             font-size: 1.1rem;
-            color: #f59e0b;
+            color: var(--accent);
         }
         .settings-close-btn {
             background: none;
             border: none;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 1.5rem;
             cursor: pointer;
             padding: 0 4px;
         }
-        .settings-close-btn:hover { color: #e0e0e0; }
+        .settings-close-btn:hover { color: var(--text-primary); }
 
         .settings-body {
             flex: 1;
@@ -794,25 +825,25 @@
 
         .settings-section {
             margin-bottom: 20px;
-            border: 1px solid #ffffff08;
+            border: 1px solid var(--border-medium);
             border-radius: 10px;
             padding: 14px;
-            background: #ffffff04;
+            background: rgba(255,255,255,0.015);
         }
         .settings-section h3 {
             font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #6b7280;
+            color: var(--text-secondary);
             margin-bottom: 12px;
         }
         .settings-section summary {
             cursor: pointer;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.8rem;
             margin-bottom: 8px;
         }
-        .settings-section summary:hover { color: #e0e0e0; }
+        .settings-section summary:hover { color: var(--text-primary); }
         details.settings-section > label { display: none; }
         details.settings-section[open] > label { display: block; }
 
@@ -827,18 +858,18 @@
             width: 100%;
             margin-top: 4px;
             padding: 8px 10px;
-            background: #0a0e27;
-            border: 1px solid #ffffff15;
+            background: var(--bg-input);
+            border: 1px solid var(--border-medium);
             border-radius: 6px;
-            color: #e0e0e0;
+            color: var(--text-primary);
             font-size: 0.85rem;
             outline: none;
         }
-        .settings-section input:focus { border-color: #f59e0b55; }
+        .settings-section input:focus { border-color: color-mix(in srgb, var(--accent) 33%, transparent); }
         .settings-hint {
             display: block;
             font-size: 0.65rem;
-            color: #4b5563;
+            color: var(--text-muted);
             margin-top: 3px;
             font-style: italic;
         }
@@ -866,6 +897,416 @@
             color: #22c55e;
         }
 
+        /* --- Display Toolbar --- */
+        .display-toolbar-btn {
+            background: none;
+            border: 1px solid var(--border-medium);
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+            font-size: 0.75rem;
+            gap: 4px;
+        }
+        .display-toolbar-btn:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 33%, transparent); }
+
+        .display-panel {
+            position: fixed;
+            top: 50px;
+            right: 16px;
+            width: 260px;
+            background: linear-gradient(180deg, var(--bg-header-1) 0%, var(--bg-body) 100%);
+            border: 1px solid var(--border-medium);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 999;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            display: none;
+        }
+        .display-panel.open { display: block; }
+
+        .display-panel h3 {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .display-section { margin-bottom: 14px; }
+        .display-section:last-child { margin-bottom: 0; }
+
+        .font-size-group {
+            display: flex;
+            gap: 4px;
+        }
+        .font-size-btn {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid var(--border-medium);
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .font-size-btn:hover { color: var(--text-primary); border-color: var(--border-light); }
+        .font-size-btn.active {
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            color: var(--accent);
+            border-color: color-mix(in srgb, var(--accent) 33%, transparent);
+        }
+
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+        .palette-swatch {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .palette-swatch:hover { transform: scale(1.1); }
+        .palette-swatch.active { border-color: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent); }
+        .palette-swatch-label {
+            font-size: 0.5rem;
+            text-align: center;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .palette-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .reset-layout-btn {
+            width: 100%;
+            padding: 6px;
+            border: 1px solid var(--border-medium);
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.7rem;
+            transition: all 0.2s;
+        }
+        .reset-layout-btn:hover { color: var(--text-primary); border-color: var(--border-light); }
+
+        /* Drag handle for sortable cards */
+        .drag-handle {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 30px;
+            height: 30px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            color: var(--accent);
+            opacity: 0.85;
+            transition: opacity 0.2s, background 0.2s;
+            z-index: 5;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            line-height: 1;
+            touch-action: none;
+            background: var(--bg-inset);
+            border: 1px solid var(--border-medium);
+        }
+        .drag-handle:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 15%, var(--bg-inset)); }
+        .drag-handle:active { cursor: grabbing; }
+        body.layout-unlocked .drag-handle { display: flex; }
+        body.layout-unlocked .card { outline: 2px dashed color-mix(in srgb, var(--accent) 40%, transparent); }
+        .card { position: relative; }
+        .card.sortable-chosen { opacity: 0.7; }
+        .card.sortable-ghost { opacity: 0.3; }
+
+        /* --- Color Palettes --- */
+
+        /* High Contrast — pure black bg, bright white text */
+        body.palette-high-contrast {
+            --bg-body: #000000;
+            --bg-card-1: #0a0a0a;
+            --bg-card-2: #050505;
+            --bg-header-1: #0a0a0a;
+            --bg-header-2: #111111;
+            --bg-inset: rgba(20, 20, 20, 0.8);
+            --bg-input: #0a0a0a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #707070;
+            --border-subtle: rgba(255,255,255,0.06);
+            --border-light: rgba(255,255,255,0.12);
+            --border-medium: rgba(255,255,255,0.18);
+            --card-shadow: rgba(0,0,0,0.5);
+        }
+
+        /* Midnight Blue — deeper blues, softer feel */
+        body.palette-midnight {
+            --bg-body: #0b1628;
+            --bg-card-1: #0f2040;
+            --bg-card-2: #0a1830;
+            --bg-header-1: #0c1a35;
+            --bg-header-2: #142850;
+            --bg-inset: rgba(11, 22, 40, 0.7);
+            --bg-input: #0b1628;
+            --text-primary: #d0dff0;
+            --text-secondary: #6889a8;
+            --text-muted: #4a6580;
+            --border-subtle: rgba(100,160,220,0.04);
+            --border-light: rgba(100,160,220,0.08);
+            --border-medium: rgba(100,160,220,0.12);
+            --accent: #4a9eff;
+            --accent-light: #7ab8ff;
+            --accent-dark: #2a7edf;
+            --card-shadow: rgba(0,10,30,0.4);
+        }
+
+        /* Emerald Dark — green/teal tinted */
+        body.palette-emerald {
+            --bg-body: #071510;
+            --bg-card-1: #0c2218;
+            --bg-card-2: #081a12;
+            --bg-header-1: #0a1e15;
+            --bg-header-2: #123020;
+            --bg-inset: rgba(7, 21, 16, 0.7);
+            --bg-input: #071510;
+            --text-primary: #d0f0e0;
+            --text-secondary: #5a9a7a;
+            --text-muted: #3a7055;
+            --border-subtle: rgba(34,197,94,0.04);
+            --border-light: rgba(34,197,94,0.08);
+            --border-medium: rgba(34,197,94,0.12);
+            --accent: #22c55e;
+            --accent-light: #4ade80;
+            --accent-dark: #16a34a;
+            --card-shadow: rgba(0,15,10,0.4);
+        }
+
+        /* Warm Sunset — dark warm tones */
+        body.palette-sunset {
+            --bg-body: #1a0e08;
+            --bg-card-1: #2a1810;
+            --bg-card-2: #1e120c;
+            --bg-header-1: #241510;
+            --bg-header-2: #352018;
+            --bg-inset: rgba(26, 14, 8, 0.7);
+            --bg-input: #1a0e08;
+            --text-primary: #f0ddd0;
+            --text-secondary: #a08060;
+            --text-muted: #705540;
+            --border-subtle: rgba(245,158,11,0.04);
+            --border-light: rgba(245,158,11,0.08);
+            --border-medium: rgba(245,158,11,0.12);
+            --accent: #f59e0b;
+            --accent-light: #fbbf24;
+            --accent-dark: #d97706;
+            --card-shadow: rgba(20,8,0,0.4);
+        }
+
+        /* Arctic Light — light theme */
+        body.palette-arctic {
+            --bg-body: #e8ecf2;
+            --bg-card-1: #ffffff;
+            --bg-card-2: #f5f7fa;
+            --bg-header-1: #ffffff;
+            --bg-header-2: #f0f2f8;
+            --bg-inset: rgba(180, 195, 215, 0.45);
+            --bg-input: #ffffff;
+            --text-primary: #111820;
+            --text-secondary: #3d4a5c;
+            --text-muted: #5c6880;
+            --border-subtle: rgba(0,0,0,0.06);
+            --border-light: rgba(0,0,0,0.10);
+            --border-medium: rgba(0,0,0,0.15);
+            --accent: #b45309;
+            --accent-light: #d97706;
+            --accent-dark: #92400e;
+            --color-solar: #b45309;
+            --color-battery: #15803d;
+            --color-load: #1d4ed8;
+            --color-grid: #dc2626;
+            --color-inverter: #7c3aed;
+            --card-shadow: rgba(0,0,0,0.10);
+        }
+        /* Arctic overrides for elements with hardcoded dark colors */
+        body.palette-arctic .sky-bg { opacity: 0.3; }
+        body.palette-arctic .settings-save-btn { color: #fff; }
+        body.palette-arctic .star { background: #333; }
+        body.palette-arctic .pf-label { color: var(--text-secondary); }
+        body.palette-arctic .night-clock-time { color: #111820; }
+        body.palette-arctic .fc-desc { color: #111820; }
+        body.palette-arctic .history-table .pv-col { color: #b45309; }
+        body.palette-arctic .history-table .load-col { color: #1d4ed8; }
+        body.palette-arctic .history-table .grid-col { color: #dc2626; }
+        body.palette-arctic .history-table .net-positive { color: #15803d; }
+        body.palette-arctic .fact-value { color: var(--accent); }
+
+        /* Slate Rose — muted pink/purple tones */
+        body.palette-rose {
+            --bg-body: #16101a;
+            --bg-card-1: #201828;
+            --bg-card-2: #1a1220;
+            --bg-header-1: #1c1525;
+            --bg-header-2: #2a1e35;
+            --bg-inset: rgba(22, 16, 26, 0.7);
+            --bg-input: #16101a;
+            --text-primary: #e8ddf0;
+            --text-secondary: #8a70a0;
+            --text-muted: #5e4870;
+            --border-subtle: rgba(200,100,220,0.04);
+            --border-light: rgba(200,100,220,0.08);
+            --border-medium: rgba(200,100,220,0.12);
+            --accent: #d070e8;
+            --accent-light: #e090ff;
+            --accent-dark: #a050c0;
+            --card-shadow: rgba(15,5,20,0.4);
+        }
+
+        /* Ocean Deep — dark teal/cyan */
+        body.palette-ocean {
+            --bg-body: #081518;
+            --bg-card-1: #0c2328;
+            --bg-card-2: #091a1e;
+            --bg-header-1: #0a1e22;
+            --bg-header-2: #103035;
+            --bg-inset: rgba(8, 21, 24, 0.7);
+            --bg-input: #081518;
+            --text-primary: #d0f0f5;
+            --text-secondary: #5a9aa5;
+            --text-muted: #3a7580;
+            --border-subtle: rgba(0,210,230,0.04);
+            --border-light: rgba(0,210,230,0.08);
+            --border-medium: rgba(0,210,230,0.12);
+            --accent: #06b6d4;
+            --accent-light: #22d3ee;
+            --accent-dark: #0891b2;
+            --card-shadow: rgba(0,12,15,0.4);
+        }
+
+        /* Volcanic — deep red/charcoal */
+        body.palette-volcanic {
+            --bg-body: #1a0a0a;
+            --bg-card-1: #281010;
+            --bg-card-2: #200c0c;
+            --bg-header-1: #241010;
+            --bg-header-2: #351818;
+            --bg-inset: rgba(26, 10, 10, 0.7);
+            --bg-input: #1a0a0a;
+            --text-primary: #f0d8d8;
+            --text-secondary: #a06868;
+            --text-muted: #704848;
+            --border-subtle: rgba(239,68,68,0.04);
+            --border-light: rgba(239,68,68,0.08);
+            --border-medium: rgba(239,68,68,0.12);
+            --accent: #ef4444;
+            --accent-light: #f87171;
+            --accent-dark: #dc2626;
+            --card-shadow: rgba(20,5,5,0.4);
+        }
+
+        /* Sandstone — warm neutral/tan light theme */
+        body.palette-sandstone {
+            --bg-body: #f0e8df;
+            --bg-card-1: #faf6f0;
+            --bg-card-2: #f2ece4;
+            --bg-header-1: #faf6f0;
+            --bg-header-2: #ede5da;
+            --bg-inset: rgba(200, 185, 165, 0.35);
+            --bg-input: #faf6f0;
+            --text-primary: #2a2218;
+            --text-secondary: #6b5d4e;
+            --text-muted: #8a7d6e;
+            --border-subtle: rgba(0,0,0,0.05);
+            --border-light: rgba(0,0,0,0.09);
+            --border-medium: rgba(0,0,0,0.13);
+            --accent: #a16207;
+            --accent-light: #ca8a04;
+            --accent-dark: #854d0e;
+            --color-solar: #a16207;
+            --color-battery: #15803d;
+            --color-load: #1d4ed8;
+            --color-grid: #dc2626;
+            --color-inverter: #7c3aed;
+            --card-shadow: rgba(0,0,0,0.06);
+        }
+        body.palette-sandstone .sky-bg { opacity: 0.3; }
+        body.palette-sandstone .settings-save-btn { color: #fff; }
+        body.palette-sandstone .star { background: #555; }
+        body.palette-sandstone .history-table .pv-col { color: #a16207; }
+        body.palette-sandstone .history-table .load-col { color: #1d4ed8; }
+        body.palette-sandstone .history-table .grid-col { color: #dc2626; }
+        body.palette-sandstone .history-table .net-positive { color: #15803d; }
+        body.palette-sandstone .fact-value { color: var(--accent); }
+
+        /* Noir — pure OLED black with gold accent */
+        body.palette-noir {
+            --bg-body: #000000;
+            --bg-card-1: #0a0a0a;
+            --bg-card-2: #050505;
+            --bg-header-1: #080808;
+            --bg-header-2: #0e0e0e;
+            --bg-inset: rgba(15, 15, 15, 0.8);
+            --bg-input: #0a0a0a;
+            --text-primary: #e8e0d0;
+            --text-secondary: #8a8070;
+            --text-muted: #5a5448;
+            --border-subtle: rgba(200,180,100,0.04);
+            --border-light: rgba(200,180,100,0.08);
+            --border-medium: rgba(200,180,100,0.12);
+            --accent: #d4a520;
+            --accent-light: #e8c030;
+            --accent-dark: #b8900a;
+            --card-shadow: rgba(0,0,0,0.6);
+        }
+
+        /* Frost — cool gray light theme */
+        body.palette-frost {
+            --bg-body: #eef1f5;
+            --bg-card-1: #f8f9fb;
+            --bg-card-2: #f0f2f6;
+            --bg-header-1: #f8f9fb;
+            --bg-header-2: #e8ecf2;
+            --bg-inset: rgba(190, 200, 220, 0.4);
+            --bg-input: #f8f9fb;
+            --text-primary: #1a1e2a;
+            --text-secondary: #4a5268;
+            --text-muted: #6a7288;
+            --border-subtle: rgba(0,0,0,0.05);
+            --border-light: rgba(0,0,0,0.09);
+            --border-medium: rgba(0,0,0,0.14);
+            --accent: #4f46e5;
+            --accent-light: #6366f1;
+            --accent-dark: #3730a3;
+            --color-solar: #d97706;
+            --color-battery: #15803d;
+            --color-load: #2563eb;
+            --color-grid: #dc2626;
+            --color-inverter: #7c3aed;
+            --card-shadow: rgba(0,0,0,0.07);
+        }
+        body.palette-frost .sky-bg { opacity: 0.3; }
+        body.palette-frost .settings-save-btn { color: #fff; }
+        body.palette-frost .star { background: #444; }
+        body.palette-frost .history-table .pv-col { color: #d97706; }
+        body.palette-frost .history-table .load-col { color: #2563eb; }
+        body.palette-frost .history-table .grid-col { color: #dc2626; }
+        body.palette-frost .history-table .net-positive { color: #15803d; }
+        body.palette-frost .fact-value { color: var(--accent); }
+
         /* --- Tablet (portrait) --- */
         @media (max-width: 1024px) {
             .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 12px; }
@@ -889,6 +1330,9 @@
             .header-status { font-size: 0.6rem; white-space: nowrap; }
             #lastUpdate { display: none; }
             .night-toggle-btn { padding: 3px 5px; font-size: 0.85rem; }
+            .display-toolbar-btn { padding: 3px 5px; font-size: 0.65rem; }
+            .display-toolbar-btn span { display: none; }
+            .display-panel { right: 8px; width: 240px; }
             .settings-gear-btn { padding: 3px 5px; margin-left: 0; }
 
             /* Card base compact */
@@ -973,10 +1417,10 @@
             gap: 6px;
         }
         .forecast-day {
-            background: #0a0e2799;
+            background: var(--bg-inset);
             border-radius: 10px;
             padding: 10px 12px;
-            border: 1px solid #ffffff08;
+            border: 1px solid var(--border-medium);
         }
         .forecast-day-today {
             border: 1px solid #f59e0b22;
@@ -1006,7 +1450,7 @@
         }
         .forecast-day-label {
             font-size: 0.7rem;
-            color: #6b7280;
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
             font-weight: 600;
@@ -1057,7 +1501,7 @@
         }
         .fc-period-header {
             font-size: 0.6rem;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-weight: 600;
             margin-bottom: 3px;
         }
@@ -1072,7 +1516,7 @@
         }
         .fc-desc {
             font-size: 0.75rem;
-            color: #e0e0e0;
+            color: var(--text-primary);
         }
         .fc-temp {
             font-weight: 700;
@@ -1083,23 +1527,23 @@
         .fc-temp-lo { color: #60a5fa; }
         .fc-period-detail {
             font-size: 0.55rem;
-            color: #6b7280;
+            color: var(--text-secondary);
         }
 
         /* --- Chart range toggle --- */
         .chart-range-toggle {
             display: flex;
             gap: 2px;
-            background: #0a0e27;
+            background: var(--bg-body);
             border-radius: 6px;
-            border: 1px solid #ffffff15;
+            border: 1px solid var(--border-medium);
             padding: 2px;
         }
         .chart-range-btn {
             padding: 3px 10px;
             border: none;
             background: transparent;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.65rem;
             font-weight: 600;
             border-radius: 4px;
@@ -1107,10 +1551,10 @@
             font-family: inherit;
             transition: all 0.2s;
         }
-        .chart-range-btn:hover { color: #e0e0e0; }
+        .chart-range-btn:hover { color: var(--text-primary); }
         .chart-range-btn.active {
-            background: #f59e0b22;
-            color: #f59e0b;
+            background: color-mix(in srgb, var(--accent) 13%, transparent);
+            color: var(--accent);
         }
 
         .chart-day-nav {
@@ -1119,8 +1563,8 @@
             gap: 6px;
         }
         .chart-nav-btn {
-            background: #0a0e27;
-            border: 1px solid #ffffff15;
+            background: var(--bg-body);
+            border: 1px solid var(--border-medium);
             color: #9ca3af;
             width: 24px;
             height: 24px;
@@ -1140,7 +1584,7 @@
         .chart-nav-btn:disabled:hover { color: #9ca3af; border-color: #ffffff15; }
         .chart-nav-label {
             font-size: 0.65rem;
-            color: #e0e0e0;
+            color: var(--text-primary);
             font-weight: 600;
             min-width: 60px;
             text-align: center;
@@ -1151,7 +1595,7 @@
             text-align: center;
             padding: 12px 16px;
             font-size: 0.65rem;
-            color: #4b5563;
+            color: var(--text-muted);
             max-width: 1400px;
             margin: 0 auto;
         }
@@ -1169,6 +1613,10 @@
             <span id="lastUpdate" style="color:#4b5563;"></span>
         </div>
         <button class="night-toggle-btn" id="nightToggleBtn" onclick="toggleNightMode()" title="Toggle night mode">&#127769;</button>
+        <button class="display-toolbar-btn" onclick="toggleDisplayPanel()" title="Display settings">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/></svg>
+            Display
+        </button>
         <button class="settings-gear-btn" onclick="toggleSettings()" title="Settings">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
         </button>
@@ -1238,6 +1686,76 @@
                 <button class="settings-save-btn" onclick="saveSettings()">Save Settings</button>
                 <span class="settings-status" id="settingsStatus"></span>
             </div>
+        </div>
+    </div>
+
+    <!-- ===== DISPLAY PANEL ===== -->
+    <div class="display-panel" id="displayPanel">
+        <div class="display-section">
+            <h3>Font Size</h3>
+            <div class="font-size-group">
+                <button class="font-size-btn" onclick="setFontSize('small')" data-size="small" style="font-size:0.65rem;">Small</button>
+                <button class="font-size-btn active" onclick="setFontSize('medium')" data-size="medium" style="font-size:0.75rem;">Medium</button>
+                <button class="font-size-btn" onclick="setFontSize('large')" data-size="large" style="font-size:0.85rem;">Large</button>
+            </div>
+        </div>
+        <div class="display-section">
+            <h3>Color Theme</h3>
+            <div class="palette-grid">
+                <div class="palette-option">
+                    <div class="palette-swatch active" onclick="setPalette('')" data-palette="" style="background: linear-gradient(135deg, #0a0e27, #111640);"></div>
+                    <div class="palette-swatch-label">Default</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('high-contrast')" data-palette="high-contrast" style="background: linear-gradient(135deg, #000, #0a0a0a); border-color: #333;"></div>
+                    <div class="palette-swatch-label">Hi-Con</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('midnight')" data-palette="midnight" style="background: linear-gradient(135deg, #0b1628, #0f2040);"></div>
+                    <div class="palette-swatch-label">Midnight</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('emerald')" data-palette="emerald" style="background: linear-gradient(135deg, #071510, #0c2218);"></div>
+                    <div class="palette-swatch-label">Emerald</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('sunset')" data-palette="sunset" style="background: linear-gradient(135deg, #1a0e08, #2a1810);"></div>
+                    <div class="palette-swatch-label">Sunset</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('arctic')" data-palette="arctic" style="background: linear-gradient(135deg, #e8ecf2, #ffffff);"></div>
+                    <div class="palette-swatch-label">Arctic</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('rose')" data-palette="rose" style="background: linear-gradient(135deg, #16101a, #201828);"></div>
+                    <div class="palette-swatch-label">Rose</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('ocean')" data-palette="ocean" style="background: linear-gradient(135deg, #081518, #0c2328);"></div>
+                    <div class="palette-swatch-label">Ocean</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('volcanic')" data-palette="volcanic" style="background: linear-gradient(135deg, #1a0a0a, #281010);"></div>
+                    <div class="palette-swatch-label">Volcanic</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('sandstone')" data-palette="sandstone" style="background: linear-gradient(135deg, #f0e8df, #faf6f0);"></div>
+                    <div class="palette-swatch-label">Sand</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('noir')" data-palette="noir" style="background: linear-gradient(135deg, #000, #0a0a0a); border: 1px solid #d4a52030;"></div>
+                    <div class="palette-swatch-label">Noir</div>
+                </div>
+                <div class="palette-option">
+                    <div class="palette-swatch" onclick="setPalette('frost')" data-palette="frost" style="background: linear-gradient(135deg, #eef1f5, #f8f9fb);"></div>
+                    <div class="palette-swatch-label">Frost</div>
+                </div>
+            </div>
+        </div>
+        <div class="display-section">
+            <h3>Layout</h3>
+            <button class="reset-layout-btn" id="layoutLockBtn" onclick="toggleLayoutLock()" style="margin-bottom:6px;">Unlock to Rearrange</button>
+            <button class="reset-layout-btn" onclick="resetCardLayout()">Reset Card Order</button>
         </div>
     </div>
 
@@ -1340,7 +1858,7 @@
         </div>
 
         <!-- Battery -->
-        <div class="card">
+        <div class="card" id="batteryCard">
             <div class="card-title" style="margin-bottom: 8px;">Battery</div>
             <div style="display: flex; align-items: baseline; gap: 4px;">
                 <span style="font-size: 2rem; font-weight: 700; color: #22c55e; line-height:1;" id="batterySoc">--</span><span style="font-size:0.85rem; color:#6b7280;">%</span>
@@ -1370,7 +1888,7 @@
         </div>
 
         <!-- Home & Grid -->
-        <div class="card">
+        <div class="card" id="homeGridCard">
             <div style="display: flex; justify-content: space-between; align-items: baseline;">
                 <div class="card-title" style="margin-bottom: 8px;">Home & Grid</div>
                 <div class="load-today-kwh" style="font-size: 0.75rem; color: #3b82f6;">
@@ -1401,7 +1919,7 @@
         </div>
 
         <!-- Money Saved -->
-        <div class="card">
+        <div class="card" id="moneyCard">
             <div class="card-title" style="margin-bottom: 8px;">Money Saved</div>
             <div style="text-align: center; margin-bottom: 8px;">
                 <div style="font-size: 2rem; font-weight: 700; color: #22c55e; line-height: 1;" id="liveDollar">$0.00</div>
@@ -1489,7 +2007,7 @@
         </div>
 
         <!-- Power Flow -->
-        <div class="card wide" data-night-hide style="position:relative; overflow:hidden;">
+        <div class="card wide" id="powerFlowCard" data-night-hide style="position:relative; overflow:hidden;">
             <div class="card-title">Power Flow</div>
             <div class="pf-wrapper" id="pfWrapper">
                 <canvas class="pf-canvas" id="pfCanvas"></canvas>
@@ -1542,7 +2060,7 @@
         </div>
 
         <!-- Energy Flow Chart -->
-        <div class="card wide" style="position: relative; overflow: hidden;">
+        <div class="card wide" id="energyFlowCard" style="position: relative; overflow: hidden;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <div class="card-title" style="margin-bottom: 0;">Energy Flow</div>
@@ -3551,6 +4069,185 @@
         if (el) el.textContent = parts.join(' ');
     }
     setInterval(tickUptime, 1000);
+
+    // =====================================================
+    //  Display Settings (font size, palette, card order)
+    // =====================================================
+
+    // --- Display Panel toggle ---
+    function toggleDisplayPanel() {
+        const panel = document.getElementById('displayPanel');
+        panel.classList.toggle('open');
+    }
+    // Close display panel when clicking outside
+    document.addEventListener('click', function(e) {
+        const panel = document.getElementById('displayPanel');
+        const btn = document.querySelector('.display-toolbar-btn');
+        if (panel && panel.classList.contains('open') &&
+            !panel.contains(e.target) && !btn.contains(e.target)) {
+            panel.classList.remove('open');
+        }
+    });
+
+    // --- Font Size ---
+    function setFontSize(size) {
+        const html = document.documentElement;
+        html.classList.remove('font-small', 'font-large');
+        if (size === 'small') html.classList.add('font-small');
+        else if (size === 'large') html.classList.add('font-large');
+        // Update button states
+        document.querySelectorAll('.font-size-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.size === size);
+        });
+        localStorage.setItem('solar-font-size', size);
+    }
+
+    // --- Color Palette ---
+    function setPalette(palette) {
+        const body = document.body;
+        // Remove all palette classes
+        body.className = body.className.replace(/palette-\S+/g, '').trim();
+        if (palette) body.classList.add('palette-' + palette);
+        // Update swatch states
+        document.querySelectorAll('.palette-swatch').forEach(sw => {
+            sw.classList.toggle('active', sw.dataset.palette === palette);
+        });
+        localStorage.setItem('solar-palette', palette);
+        // Update chart colors if charts exist
+        updateChartColors();
+    }
+
+    // Update Chart.js colors to match the current palette
+    function updateChartColors() {
+        // Get current CSS variable values
+        const style = getComputedStyle(document.documentElement);
+        const textSecondary = style.getPropertyValue('--text-secondary').trim() || '#6b7280';
+        const textMuted = style.getPropertyValue('--text-muted').trim() || '#4b5563';
+        const borderLight = style.getPropertyValue('--border-light').trim() || 'rgba(255,255,255,0.06)';
+        // Update all Chart.js instances
+        Chart.helpers.each(Chart.instances, function(chart) {
+            if (chart.options.scales) {
+                ['x', 'y'].forEach(axis => {
+                    if (chart.options.scales[axis]) {
+                        if (chart.options.scales[axis].ticks) {
+                            chart.options.scales[axis].ticks.color = textSecondary;
+                        }
+                        if (chart.options.scales[axis].grid) {
+                            chart.options.scales[axis].grid.color = borderLight;
+                        }
+                    }
+                });
+            }
+            chart.update('none');
+        });
+    }
+
+    // --- Sortable Card Grid ---
+    let sortableInstance = null;
+    let layoutUnlocked = false;
+
+    function addDragHandles() {
+        const grid = document.querySelector('.grid');
+        if (!grid) return;
+        grid.querySelectorAll('.card').forEach(card => {
+            if (!card.querySelector('.drag-handle')) {
+                const handle = document.createElement('div');
+                handle.className = 'drag-handle';
+                handle.innerHTML = '⋮⋮';
+                handle.title = 'Drag to reorder';
+                card.appendChild(handle);
+            }
+        });
+    }
+
+    function initSortable() {
+        const grid = document.querySelector('.grid');
+        if (!grid) return;
+        addDragHandles();
+        if (sortableInstance) return;
+        sortableInstance = Sortable.create(grid, {
+            animation: 200,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            handle: '.drag-handle',
+            draggable: '.card',
+            filter: '.night-clock',
+            disabled: true,
+            onEnd: function() {
+                saveCardOrder();
+            }
+        });
+    }
+
+    function toggleLayoutLock() {
+        layoutUnlocked = !layoutUnlocked;
+        document.body.classList.toggle('layout-unlocked', layoutUnlocked);
+        if (sortableInstance) {
+            sortableInstance.option('disabled', !layoutUnlocked);
+        }
+        const btn = document.getElementById('layoutLockBtn');
+        if (btn) {
+            btn.textContent = layoutUnlocked ? 'Lock Layout' : 'Unlock to Rearrange';
+        }
+    }
+
+    function saveCardOrder() {
+        const grid = document.querySelector('.grid');
+        const order = [];
+        grid.querySelectorAll('.card').forEach(card => {
+            order.push(card.id || card.querySelector('.card-title')?.textContent || '');
+        });
+        localStorage.setItem('solar-card-order', JSON.stringify(order));
+    }
+
+    function restoreCardOrder() {
+        const saved = localStorage.getItem('solar-card-order');
+        if (!saved) return;
+        try {
+            const order = JSON.parse(saved);
+            const grid = document.querySelector('.grid');
+            const cards = Array.from(grid.querySelectorAll('.card'));
+            const nightClock = grid.querySelector('.night-clock');
+            // Build a map of card identifiers to elements
+            const cardMap = {};
+            cards.forEach(card => {
+                const key = card.id || card.querySelector('.card-title')?.textContent || '';
+                if (key) cardMap[key] = card;
+            });
+            // Reorder based on saved order
+            order.forEach(key => {
+                if (cardMap[key]) {
+                    grid.appendChild(cardMap[key]);
+                }
+            });
+        } catch (e) {
+            console.warn('Could not restore card order:', e);
+        }
+    }
+
+    function resetCardLayout() {
+        localStorage.removeItem('solar-card-order');
+        location.reload();
+    }
+
+    // --- Apply saved preferences on load ---
+    (function applySavedPrefs() {
+        // Font size
+        const savedFont = localStorage.getItem('solar-font-size') || 'medium';
+        if (savedFont !== 'medium') setFontSize(savedFont);
+        else {
+            document.querySelectorAll('.font-size-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.size === 'medium');
+            });
+        }
+        // Palette
+        const savedPalette = localStorage.getItem('solar-palette') || '';
+        if (savedPalette) setPalette(savedPalette);
+        // Card order
+        restoreCardOrder();
+        // Init sortable
+        initSortable();
+    })();
 </script>
 
 <div class="uptime-footer">
