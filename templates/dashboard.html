@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0e27">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>Solar Dashboard</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -143,6 +148,81 @@
         }
 
         .wide { grid-column: span 4; }
+
+        /* --- Radial Gauge (battery + PV) ---
+           Reusable 270° arc gauge, color-graduated red→yellow→green.
+           Big enough to glance at from across a room.
+           SVG circle uses stroke-dasharray to expose 75% of its circumference
+           (the rest forms the gap at the bottom). Fill ring shrinks
+           stroke-dashoffset from the full arc length down to 0 as value rises.
+        */
+        .radial-gauge-wrap {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 6px 0 4px;
+        }
+        .radial-gauge-svg {
+            width: 100%;
+            max-width: 220px;
+            aspect-ratio: 1 / 1;
+            display: block;
+            overflow: visible;
+        }
+        .radial-gauge-track {
+            fill: none;
+            stroke: var(--border-light, rgba(255,255,255,0.06));
+            stroke-width: 16;
+            stroke-linecap: round;
+            opacity: 0.9;
+        }
+        .radial-gauge-fill {
+            fill: none;
+            stroke-width: 16;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1),
+                        stroke 0.9s ease;
+            filter: drop-shadow(0 0 6px currentColor);
+        }
+        .radial-gauge-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            pointer-events: none;
+            line-height: 1.05;
+        }
+        .radial-gauge-value {
+            font-size: 2.6rem;
+            font-weight: 700;
+            color: var(--text-primary, #f3f4f6);
+            line-height: 1;
+        }
+        .radial-gauge-unit {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary, #9ca3af);
+            margin-top: 2px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .radial-gauge-sub {
+            font-size: 0.7rem;
+            color: var(--text-secondary, #9ca3af);
+            margin-top: 4px;
+        }
+        @media (max-width: 600px) {
+            .radial-gauge-svg { max-width: 150px; }
+            .radial-gauge-value { font-size: 1.7rem; }
+            .radial-gauge-unit { font-size: 0.7rem; }
+            .radial-gauge-track,
+            .radial-gauge-fill { stroke-width: 14; }
+        }
 
         /* --- Power Flow (HA-style cross layout) --- */
         .pf-wrapper {
@@ -755,6 +835,96 @@
 
         /* Hide solar legend in energy chart at night */
         body.night-mode .energy-solar-legend { display: none !important; }
+
+        /* --- Big Clock layout mode ---
+           Three-row layout for tablets mounted around the property:
+             Row 1: top stat cards (Solar / Battery / Home & Grid / Money) — compact
+             Row 2: massive clock (~60% width) + Solar Forecast (~40% width)
+             Row 3: full-width Power Flow cross-diagram
+           Hidden in this mode: charts, NILM/appliance panel, energy-flow numbers,
+           the night-clock element (the big clock replaces it).
+           Toggled by adding `layout-big-clock` to <body>. Persisted in localStorage.
+        */
+        .big-clock { display: none; }
+        body.layout-big-clock .big-clock {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 16px 8px;
+        }
+        .big-clock-time {
+            font-size: clamp(4rem, 11vw, 8rem);
+            font-weight: 700;
+            color: var(--text-primary, #f3f4f6);
+            letter-spacing: 2px;
+            line-height: 1;
+            text-shadow: 0 4px 24px rgba(0,0,0,0.4);
+        }
+        .big-clock-date {
+            font-size: clamp(1rem, 2.2vw, 1.7rem);
+            color: var(--text-secondary, #9ca3af);
+            margin-top: 14px;
+        }
+        .big-clock-weather {
+            font-size: clamp(0.95rem, 1.8vw, 1.4rem);
+            color: var(--text-secondary, #9ca3af);
+            margin-top: 8px;
+        }
+
+        /* In Big Clock mode: kill the chart-heavy / text-dense panels only.
+           Top stat cards, forecast, and power flow stay. */
+        body.layout-big-clock .night-clock,
+        body.layout-big-clock #energyFlowCard,
+        body.layout-big-clock .bottom-section {
+            display: none !important;
+        }
+
+        /* Tablet+ : 12-col custom grid for the middle row split (clock 7 / forecast 5). */
+        @media (min-width: 768px) {
+            body.layout-big-clock .grid {
+                grid-template-columns: repeat(12, 1fr);
+                max-width: 1600px;
+            }
+            /* Top stat cards — 4 across, span 3 of 12 each. */
+            body.layout-big-clock #solarCard,
+            body.layout-big-clock #batteryCard,
+            body.layout-big-clock #homeGridCard,
+            body.layout-big-clock #moneyCard {
+                grid-column: span 3;
+            }
+            /* Middle row: clock left ~58%, forecast right ~42%. `order` pulls
+               them ahead of the wide cards in the source while keeping the top
+               row in DOM order. */
+            body.layout-big-clock #bigClockDisplay {
+                grid-column: span 7;
+                order: 1;
+                min-height: 320px;
+            }
+            body.layout-big-clock #forecastCard {
+                grid-column: span 5 !important;
+                order: 1;
+            }
+            /* Power Flow full width. */
+            body.layout-big-clock #powerFlowCard {
+                grid-column: 1 / -1 !important;
+                order: 2;
+            }
+        }
+
+        /* Mobile/phone: stack everything vertically. The big clock keeps prominence
+           via the clamp() font-size; it spans the full row. Other cards flow naturally. */
+        @media (max-width: 767px) {
+            body.layout-big-clock #bigClockDisplay {
+                grid-column: 1 / -1;
+                order: 1;
+            }
+            body.layout-big-clock #forecastCard,
+            body.layout-big-clock #powerFlowCard {
+                order: 2;
+            }
+        }
 
         .setup-wizard-btn {
             background: none;
@@ -1668,6 +1838,11 @@
                     <label>Battery Capacity (kWh) <input type="number" id="set_battery_capacity_wh" step="0.1" placeholder="0"><span class="settings-hint">e.g. 5 for 5kWh, 48 for 48kWh. 0 = auto-detect</span></label>
                     <label>Inverter Idle Load (W) <input type="number" id="set_inverter_idle_load" placeholder="70"><span class="settings-hint">Watts drawn when nothing else is on</span></label>
                 </div>
+                <!-- Solar Array -->
+                <div class="settings-section">
+                    <h3>Solar Array</h3>
+                    <label>Expected Max Solar Output (kW) <input type="number" id="set_expected_max_pv_kw" step="0.1" placeholder="10"><span class="settings-hint">Your array's nameplate capacity. Used to scale the PV gauge.</span></label>
+                </div>
                 <!-- NILM / Advanced -->
                 <details class="settings-section">
                     <summary><h3 style="display:inline;">Advanced / NILM</h3></summary>
@@ -1754,6 +1929,11 @@
         </div>
         <div class="display-section">
             <h3>Layout</h3>
+            <!-- Layout mode picker — preset layouts, persisted to localStorage. -->
+            <div class="font-size-group" style="margin-bottom: 8px;">
+                <button class="font-size-btn active" onclick="setLayoutMode('standard')" data-layout="standard">Standard</button>
+                <button class="font-size-btn" onclick="setLayoutMode('big-clock')" data-layout="big-clock">Big Clock</button>
+            </div>
             <button class="reset-layout-btn" id="layoutLockBtn" onclick="toggleLayoutLock()" style="margin-bottom:6px;">Unlock to Rearrange</button>
             <button class="reset-layout-btn" onclick="resetCardLayout()">Reset Card Order</button>
         </div>
@@ -1761,6 +1941,13 @@
 
     <!-- ===== CARD GRID ===== -->
     <div class="grid">
+
+        <!-- Big Clock (visible only when layout=big-clock). Across-the-room readable. -->
+        <div class="big-clock" id="bigClockDisplay">
+            <div class="big-clock-time" id="bigClockTime">--:--</div>
+            <div class="big-clock-date" id="bigClockDate">--</div>
+            <div class="big-clock-weather"><span id="bigClockWxIcon">--</span> <span id="bigClockWxTemp">--</span>&deg;F &middot; <span id="bigClockWxDesc">--</span></div>
+        </div>
 
         <!-- Night clock (visible only in night mode) -->
         <div class="night-clock">
@@ -1810,27 +1997,26 @@
             </div>
             <!-- Day view (default) -->
             <div id="solarDayView">
-            <div class="sun-arc-wrap" style="position: relative; width: 100%; height: 80px; margin-top: 4px;">
-                <svg id="sunArc" viewBox="0 0 260 100" preserveAspectRatio="xMidYMid meet" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-                    <defs>
-                        <radialGradient id="sunGlowGrad">
-                            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/>
-                            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
-                        </radialGradient>
-                    </defs>
-                    <path id="sunPath" d="M 15 85 Q 130 -5 245 85" fill="none" stroke="#f59e0b18" stroke-width="1.5" stroke-dasharray="4,4"/>
-                    <path id="sunPathLit" d="" fill="none" stroke="#f59e0b40" stroke-width="2.5"/>
-                    <circle id="sunGlow" cx="130" cy="40" r="24" fill="url(#sunGlowGrad)" opacity="0"/>
-                    <circle id="sunDot" cx="130" cy="40" r="4" fill="#f59e0b" opacity="0"/>
-                    <g id="sunRays" opacity="0"></g>
-                    <text id="sunriseLabel" x="18" y="96" fill="#f59e0b99" font-size="9" font-weight="600" text-anchor="start">--</text>
-                    <text id="sunsetLabel" x="242" y="96" fill="#f59e0b99" font-size="9" font-weight="600" text-anchor="end">--</text>
+            <!-- Radial PV gauge: 100% = expected_max_pv_kw (configured in setup).
+                 Color graduates red(<20%)→yellow(20-50%)→green(>50%) so green = great sun.
+                 Center shows current production in W (or kW above 1000W). -->
+            <div class="radial-gauge-wrap" style="position: relative; z-index: 1;">
+                <svg class="radial-gauge-svg" viewBox="0 0 200 200">
+                    <circle class="radial-gauge-track" cx="100" cy="100" r="80"
+                            stroke-dasharray="376.99 502.65"
+                            transform="rotate(135 100 100)"/>
+                    <circle class="radial-gauge-fill" id="pvGaugeFill"
+                            cx="100" cy="100" r="80"
+                            stroke-dasharray="376.99 502.65"
+                            stroke-dashoffset="376.99"
+                            stroke="#ef4444"
+                            transform="rotate(135 100 100)"/>
                 </svg>
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 1; text-shadow: 0 1px 6px rgba(0,0,0,0.8);">
-                    <div class="pv-power-num" style="font-size: 2.4rem; font-weight: 700; color: #f59e0b; line-height: 1;">
-                        <span id="pvPower">--</span><span style="font-size: 0.9rem; color: #9ca3af;" data-sky-subtle> W</span>
+                <div class="radial-gauge-center" style="text-shadow: 0 1px 6px rgba(0,0,0,0.6);">
+                    <div class="pv-power-num radial-gauge-value" style="color: #f59e0b;">
+                        <span id="pvPower">--</span><span class="radial-gauge-unit" id="pvPowerUnit" style="display:inline; margin-left: 4px; font-size: 0.95rem; color: #9ca3af;" data-sky-subtle>W</span>
                     </div>
-                    <div style="font-size: 0.7rem; color: #7a8296; margin-top: 2px;" data-sky-secondary>
+                    <div style="font-size: 0.7rem; color: #7a8296; margin-top: 4px;" data-sky-secondary>
                         <span id="pvVoltage1">--</span>V &middot; <span id="pvCurrent1">--</span>A
                     </div>
                 </div>
@@ -1859,21 +2045,31 @@
 
         <!-- Battery -->
         <div class="card" id="batteryCard">
-            <div class="card-title" style="margin-bottom: 8px;">Battery</div>
-            <div style="display: flex; align-items: baseline; gap: 4px;">
-                <span style="font-size: 2rem; font-weight: 700; color: #22c55e; line-height:1;" id="batterySoc">--</span><span style="font-size:0.85rem; color:#6b7280;">%</span>
-                <span style="font-size: 0.7rem; color: #6b7280; margin-left: 4px;" id="batteryDirection"></span>
+            <div class="card-title" style="margin-bottom: 4px;">Battery</div>
+            <!-- Radial SOC gauge (replaces old rectangle bar). Color graduates
+                 red(0-20)→yellow(20-50)→green(50-100). SOC % is centered. -->
+            <div class="radial-gauge-wrap">
+                <svg class="radial-gauge-svg" viewBox="0 0 200 200">
+                    <circle class="radial-gauge-track" cx="100" cy="100" r="80"
+                            stroke-dasharray="376.99 502.65"
+                            transform="rotate(135 100 100)"/>
+                    <circle class="radial-gauge-fill" id="batteryGaugeFill"
+                            cx="100" cy="100" r="80"
+                            stroke-dasharray="376.99 502.65"
+                            stroke-dashoffset="376.99"
+                            stroke="#22c55e"
+                            transform="rotate(135 100 100)"/>
+                </svg>
+                <div class="radial-gauge-center">
+                    <div class="radial-gauge-value">
+                        <span id="batterySoc">--</span><span style="font-size: 1.2rem; color: var(--text-secondary, #9ca3af); font-weight: 600;">%</span>
+                    </div>
+                    <div class="radial-gauge-unit" id="batteryDirection" style="min-height: 0.95rem;"></div>
+                </div>
             </div>
-            <!-- Battery-shaped SVG graphic -->
-            <svg id="batterySvg" viewBox="0 0 200 28" style="width: 100%; height: 28px; margin-top: 4px;">
-                <!-- Battery body outline -->
-                <rect x="1" y="2" width="188" height="24" rx="4" ry="4" fill="#1e2247" stroke="#374151" stroke-width="1.5"/>
-                <!-- Fill bar (scales from 0 to 184px wide inside the body) -->
-                <rect id="batteryFill" x="3" y="4" width="0" height="20" rx="3" ry="3" style="transition: width 1s, fill 1s;"/>
-                <!-- Terminal nub on the right -->
-                <rect x="190" y="8" width="6" height="12" rx="2" ry="2" fill="#374151"/>
-            </svg>
-            <div style="font-size: 0.7rem; color: #6b7280; margin-top: 3px;">
+            <!-- Hidden compatibility node — older code paths still write to this id. -->
+            <span id="batteryFill" style="display:none;"></span>
+            <div style="font-size: 0.7rem; color: #6b7280; margin-top: 3px; text-align: center;">
                 <span id="batteryVoltage">--</span>V &middot; <span id="batteryCurrent">--</span>A &middot; <span id="batteryPower">--</span>W
             </div>
             <div style="font-size: 0.65rem; color: #4b5563; margin-top: 2px;">
@@ -2686,6 +2882,65 @@
     }
 
     // =====================================================
+    //  Radial Gauges (battery + PV)
+    // =====================================================
+    // Smoothly interpolates two hex colors. t = 0..1.
+    function lerpColor(a, b, t) {
+        const ar = parseInt(a.slice(1, 3), 16), ag = parseInt(a.slice(3, 5), 16), ab = parseInt(a.slice(5, 7), 16);
+        const br = parseInt(b.slice(1, 3), 16), bg = parseInt(b.slice(3, 5), 16), bb = parseInt(b.slice(5, 7), 16);
+        const r = Math.round(ar + (br - ar) * t);
+        const g = Math.round(ag + (bg - ag) * t);
+        const bl = Math.round(ab + (bb - ab) * t);
+        return "#" + [r, g, bl].map(v => v.toString(16).padStart(2, "0")).join("");
+    }
+
+    // Returns a graduated color for a 0-100 percentage:
+    //   <20  red→orange (#ef4444 → #f97316)
+    //   20-50 orange→yellow (#f97316 → #eab308)
+    //   50-100 yellow→green (#eab308 → #22c55e)
+    // Used for both battery (where high = good, green) and PV (where high = good sun).
+    function gaugeColorForPct(pct) {
+        pct = Math.max(0, Math.min(100, pct));
+        if (pct >= 50) return lerpColor("#eab308", "#22c55e", (pct - 50) / 50);
+        if (pct >= 20) return lerpColor("#f97316", "#eab308", (pct - 20) / 30);
+        return lerpColor("#ef4444", "#f97316", pct / 20);
+    }
+
+    // 270° arc length on r=80 circle: 0.75 * 2π * 80 ≈ 376.99
+    const GAUGE_ARC_LEN = 376.991118;
+
+    // Update a radial gauge by id. pct is 0-100; transitions smoothly via CSS.
+    function setRadialGauge(fillId, pct) {
+        const el = document.getElementById(fillId);
+        if (!el) return;
+        pct = Math.max(0, Math.min(100, pct));
+        // 0% → fully hidden (offset = arcLen), 100% → fully revealed (offset = 0)
+        const offset = GAUGE_ARC_LEN * (1 - pct / 100);
+        el.setAttribute("stroke-dashoffset", offset.toFixed(2));
+        el.setAttribute("stroke", gaugeColorForPct(pct));
+    }
+
+    // Update PV gauge: scales pvWatts against expectedMaxPvW. Also updates the
+    // unit label (W vs kW) so the centered number stays glanceable.
+    function updatePvGauge(pvWatts) {
+        const max = expectedMaxPvW > 0 ? expectedMaxPvW : 10000;
+        const pct = (pvWatts / max) * 100;
+        setRadialGauge("pvGaugeFill", pct);
+        // Switch to kW when above 1000W to keep the centered number compact.
+        const valueEl = document.getElementById("pvPower");
+        const unitEl = document.getElementById("pvPowerUnit");
+        if (valueEl && unitEl) {
+            if (pvWatts >= 1000) {
+                valueEl.textContent = (pvWatts / 1000).toFixed(1);
+                unitEl.textContent = "kW";
+            } else {
+                valueEl.textContent = Math.round(pvWatts);
+                unitEl.textContent = "W";
+            }
+        }
+    }
+
+    // =====================================================
     //  Battery Charge Rate (%/hr)
     // =====================================================
     // Uses current battery power with a short rolling average, plus learned
@@ -2810,7 +3065,11 @@
         if (data.last_update) setText("lastUpdate", data.last_update);
 
         // Solar
-        if (data.pv_power !== undefined) { setText("pvPower", Math.round(data.pv_power)); currentPvWatts = data.pv_power; updateSmartCloudCover(); }
+        if (data.pv_power !== undefined) {
+            currentPvWatts = data.pv_power;
+            updatePvGauge(data.pv_power);          // radial gauge + center value (W/kW)
+            updateSmartCloudCover();
+        }
         if (data.pv_voltage_1 !== undefined) setText("pvVoltage1", data.pv_voltage_1);
         if (data.pv_current_1 !== undefined) setText("pvCurrent1", data.pv_current_1);
 
@@ -2818,9 +3077,7 @@
         if (data.battery_soc !== undefined) {
             const soc = Math.round(data.battery_soc);
             setText("batterySoc", soc);
-            const fill = document.getElementById("batteryFill");
-            fill.setAttribute("width", (soc / 100 * 184));
-            fill.setAttribute("fill", getBatterySolidColor(soc));
+            setRadialGauge("batteryGaugeFill", soc);   // radial gauge replaces the old bar
             updateBatteryRate(data.battery_soc, data.battery_power);
         }
         if (data.battery_voltage !== undefined) setText("batteryVoltage", data.battery_voltage);
@@ -3006,6 +3263,8 @@
 
         const dot = document.getElementById("sunDot"), glow = document.getElementById("sunGlow");
         const rays = document.getElementById("sunRays"), litPath = document.getElementById("sunPathLit");
+        // Sun arc may not exist (e.g. when PV card uses the radial gauge instead) — skip silently.
+        if (!dot || !glow || !rays || !litPath) return;
 
         if (isDay) {
             dot.setAttribute("cx", sx); dot.setAttribute("cy", sy); dot.setAttribute("opacity", "1");
@@ -3262,14 +3521,16 @@
             sunriseTime = new Date(w.sunrise);
             const rh = sunriseTime.getHours(), rm = sunriseTime.getMinutes();
             const riseStr = ((rh % 12) || 12) + ":" + String(rm).padStart(2, "0") + (rh >= 12 ? " PM" : " AM");
-            document.getElementById("sunriseLabel").textContent = riseStr;
+            const sunriseLabel = document.getElementById("sunriseLabel");
+            if (sunriseLabel) sunriseLabel.textContent = riseStr;
             setText("sunriseTime", riseStr);
         }
         if (w.sunset) {
             sunsetTime = new Date(w.sunset);
             const sh = sunsetTime.getHours(), sm = sunsetTime.getMinutes();
             const setStr = ((sh % 12) || 12) + ":" + String(sm).padStart(2, "0") + (sh >= 12 ? " PM" : " AM");
-            document.getElementById("sunsetLabel").textContent = setStr;
+            const sunsetLabel = document.getElementById("sunsetLabel");
+            if (sunsetLabel) sunsetLabel.textContent = setStr;
             setText("sunsetTime", setStr);
         }
         if (sunriseTime && sunsetTime) {
@@ -3303,6 +3564,9 @@
     let currentPvWatts = 0, currentBatDischargeW = 0, batDollarAccum = 0, batWasCharging = false;
     let todayKwhBase = 0, todayDollarAccum = 0;
     let RATE = 0.30;
+    // Nameplate solar capacity in W — defines the 100% mark on the PV gauge.
+    // Default 10 kW; overridden by /api/settings/rate (which reads expected_max_pv_kw).
+    let expectedMaxPvW = 10000;
 
     function tickDollar() {
         const dt = 1 / 60;
@@ -3853,6 +4117,7 @@
         "mqtt_broker", "mqtt_port", "mqtt_user", "mqtt_pass", "sa_host",
         "location_lat", "location_lon", "location_name", "timezone",
         "electricity_rate", "battery_capacity_wh", "inverter_idle_load",
+        "expected_max_pv_kw",
         "nilm_edge_threshold", "nilm_debounce", "nilm_signature_tolerance",
         "nilm_smoothing_window", "web_port"
     ];
@@ -3923,13 +4188,18 @@
     }
 
     async function loadSettingsForDashboard() {
-        // Fetch rate + battery capacity from settings for JS-side calculations
+        // Fetch rate + battery capacity + max PV from settings for JS-side calculations
         try {
             const res = await fetch("/api/settings/rate");
             const data = await res.json();
             if (data.rate) RATE = parseFloat(data.rate);
             if (data.battery_capacity_wh > 0) {
                 userSetCapacityWh = data.battery_capacity_wh;
+            }
+            if (data.expected_max_pv_kw && parseFloat(data.expected_max_pv_kw) > 0) {
+                expectedMaxPvW = parseFloat(data.expected_max_pv_kw) * 1000;
+                // Refresh the PV gauge so the new scale takes effect immediately
+                if (typeof updatePvGauge === "function") updatePvGauge(currentPvWatts || 0);
             }
         } catch (err) { console.error("Settings rate load error:", err); }
     }
@@ -4102,6 +4372,47 @@
         localStorage.setItem('solar-font-size', size);
     }
 
+    // --- Layout Mode (Standard | Big Clock) ---
+    // Persisted to localStorage so each tablet remembers its layout.
+    function setLayoutMode(mode) {
+        const body = document.body;
+        body.classList.remove('layout-big-clock'); // we may add more presets later
+        if (mode === 'big-clock') body.classList.add('layout-big-clock');
+        document.querySelectorAll('[data-layout]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.layout === mode);
+        });
+        localStorage.setItem('solar-layout', mode);
+        // Refresh big-clock content immediately so it isn't blank when first selected.
+        if (mode === 'big-clock') tickBigClock();
+        // Charts may need to relayout if hidden/shown.
+        if (typeof updateChartColors === 'function') {
+            try { updateChartColors(); } catch (e) {}
+        }
+    }
+
+    // Big Clock tick — runs every second when the layout is active (and harmlessly
+    // every second when it isn't, so it's ready instantly when the user toggles).
+    function tickBigClock() {
+        const timeEl = document.getElementById('bigClockTime');
+        if (!timeEl) return;
+        const now = new Date();
+        const h12 = now.getHours() % 12 || 12;
+        const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        timeEl.textContent = h12 + ':' + mins + ' ' + ampm;
+        const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        setText('bigClockDate', days[now.getDay()] + ', ' + months[now.getMonth()] + ' ' + now.getDate());
+        // Mirror weather from the existing clock-weather feed if present
+        const wxIcon = document.getElementById('clockWxIcon');
+        const wxTemp = document.getElementById('clockWxTemp');
+        const wxDesc = document.getElementById('clockWxDesc');
+        if (wxIcon) setText('bigClockWxIcon', wxIcon.textContent);
+        if (wxTemp) setText('bigClockWxTemp', wxTemp.textContent);
+        if (wxDesc) setText('bigClockWxDesc', wxDesc.textContent);
+    }
+    setInterval(tickBigClock, 1000);
+
     // --- Color Palette ---
     function setPalette(palette) {
         const body = document.body;
@@ -4171,7 +4482,7 @@
             chosenClass: 'sortable-chosen',
             handle: '.drag-handle',
             draggable: '.card',
-            filter: '.night-clock',
+            filter: '.night-clock, .big-clock',
             disabled: true,
             onEnd: function() {
                 saveCardOrder();
@@ -4243,6 +4554,9 @@
         // Palette
         const savedPalette = localStorage.getItem('solar-palette') || '';
         if (savedPalette) setPalette(savedPalette);
+        // Layout mode
+        const savedLayout = localStorage.getItem('solar-layout') || 'standard';
+        setLayoutMode(savedLayout);
         // Card order
         restoreCardOrder();
         // Init sortable
@@ -4256,5 +4570,10 @@
     <span style="opacity: 0.4; font-size: 0.65rem;">&copy; 2026 Gino Varisano</span>
 </div>
 
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+</script>
 </body>
 </html>

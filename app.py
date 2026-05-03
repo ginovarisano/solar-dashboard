@@ -60,6 +60,12 @@ _SETTINGS_DEFAULTS = {
     "timezone": "America/New_York",
     "electricity_rate": "0.30",
     "battery_capacity_wh": "0",
+    # expected_max_pv_kw: Nameplate capacity of the user's solar array in kW.
+    # Used to scale the radial PV gauge so 100% on the gauge = this value.
+    # Default 10 kW is a reasonable mid-size residential setup. Users should
+    # set this to their actual array size (sum of panel wattage) for accurate
+    # color thresholds (red <20%, yellow 20-50%, green >50%).
+    "expected_max_pv_kw": "10",
     "inverter_idle_load": "70",
     "nilm_edge_threshold": "15",
     "nilm_debounce": "8",
@@ -925,6 +931,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
     else:
         print(f"MQTT connection failed: {reason_code}")
 
+def on_disconnect(client, userdata, flags, reason_code, properties):
+    print(f"MQTT disconnected (rc={reason_code}) — will auto-reconnect")
+
 
 _cumulative = {
     "pv_energy_total": None,
@@ -1356,13 +1365,16 @@ def start_mqtt():
     if user:
         client.username_pw_set(user, passwd)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
+    # Auto-reconnect: start at 1s delay, max 120s, keeps retrying forever
+    client.reconnect_delay_set(min_delay=1, max_delay=120)
     try:
         client.connect(broker, port)
     except Exception as e:
         print(f"MQTT connect error: {e}")
     _mqtt_client = client
-    client.loop_forever()
+    client.loop_forever(retry_first_connection=True)
 
 
 def reconnect_mqtt():
@@ -1462,6 +1474,7 @@ def api_settings_rate():
     return jsonify({
         "rate": get_setting_float("electricity_rate", 0.30),
         "battery_capacity_wh": get_setting_int("battery_capacity_wh", 0),
+        "expected_max_pv_kw": get_setting_float("expected_max_pv_kw", 10.0),
     })
 
 
@@ -1469,7 +1482,39 @@ def api_settings_rate():
 #  Startup
 # =====================================================
 
+PID_FILE = os.path.join(_APP_DIR, "solar-dashboard.pid")
+
+def acquire_pid_lock():
+    """Write PID file, exit if another instance is already running."""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                old_pid = int(f.read().strip())
+            # Check if that process is actually alive
+            os.kill(old_pid, 0)
+            print(f"[ERROR] Solar Dashboard is already running (PID {old_pid}). Exiting.")
+            sys.exit(1)
+        except (ProcessLookupError, ValueError):
+            # Stale PID file — process is gone, safe to overwrite
+            pass
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+def release_pid_lock():
+    try:
+        os.remove(PID_FILE)
+    except FileNotFoundError:
+        pass
+
+import atexit
+import signal
+
 if __name__ == "__main__":
+    acquire_pid_lock()
+    atexit.register(release_pid_lock)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda s, f: (release_pid_lock(), sys.exit(0)))
+
     init_db()
     load_settings_cache()
     apply_nilm_settings()

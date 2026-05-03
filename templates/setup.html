@@ -301,6 +301,24 @@
             </div>
         </div>
 
+        <!-- Section 5: Solar Array Capacity -->
+        <div class="section">
+            <div class="section-header">
+                <span class="section-number">5</span>
+                <span class="section-title">Expected Max Solar Output (kW)</span>
+            </div>
+            <p class="section-hint">
+                Your array's nameplate capacity. Used to scale the PV gauge.
+                Add up the wattage of all your panels (e.g. 20 panels &times; 400W = 8 kW).
+            </p>
+            <div class="form-row">
+                <div class="form-group" style="max-width: 200px;">
+                    <label for="expected_max_pv_kw">Max kW</label>
+                    <input type="text" id="expected_max_pv_kw" placeholder="10" value="{{ settings.expected_max_pv_kw or '10' }}">
+                </div>
+            </div>
+        </div>
+
         <!-- Save button -->
         <button class="launch-btn" id="saveBtn" onclick="saveSetup()">
             Save &amp; Launch Dashboard
@@ -379,7 +397,8 @@
                 location_name: document.getElementById('location_name').value.trim(),
                 timezone: document.getElementById('timezone').value.trim() || 'America/New_York',
                 electricity_rate: document.getElementById('electricity_rate').value.trim() || '0.30',
-                battery_capacity_wh: String(Math.round((parseFloat(document.getElementById('battery_capacity_kwh').value.trim()) || 0) * 1000))
+                battery_capacity_wh: String(Math.round((parseFloat(document.getElementById('battery_capacity_kwh').value.trim()) || 0) * 1000)),
+                expected_max_pv_kw: String(parseFloat(document.getElementById('expected_max_pv_kw').value.trim()) || 10)
             };
 
             // Send to server

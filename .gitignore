@@ -1,4 +1,5 @@
 solar_history.db
+solar-dashboard.pid
 __pycache__/
 *.pyc
 .DS_Store
