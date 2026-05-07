@@ -67,10 +67,11 @@ _SETTINGS_DEFAULTS = {
     # color thresholds (red <20%, yellow 20-50%, green >50%).
     "expected_max_pv_kw": "10",
     "inverter_idle_load": "70",
-    "nilm_edge_threshold": "15",
-    "nilm_debounce": "8",
-    "nilm_signature_tolerance": "0.25",
-    "nilm_smoothing_window": "3",
+    # v1.5: load events. Edge detection only — signature matching retired,
+    # so nilm_signature_tolerance / nilm_smoothing_window are no longer
+    # honored (they may still exist in old DBs harmlessly).
+    "nilm_edge_threshold": "30",
+    "nilm_debounce": "10",
     "web_port": "5050",
     "setup_completed": "false",
 }
@@ -127,10 +128,8 @@ def load_settings_cache():
 
 def apply_nilm_settings():
     """Push current settings to nilm_engine module-level constants."""
-    nilm_engine.EDGE_THRESHOLD = get_setting_float("nilm_edge_threshold", 15)
-    nilm_engine.DEBOUNCE_SECONDS = get_setting_float("nilm_debounce", 8)
-    nilm_engine.SIGNATURE_TOLERANCE = get_setting_float("nilm_signature_tolerance", 0.25)
-    nilm_engine.SMOOTHING_WINDOW = get_setting_int("nilm_smoothing_window", 3)
+    nilm_engine.EDGE_THRESHOLD = get_setting_float("nilm_edge_threshold", 30)
+    nilm_engine.DEBOUNCE_SECONDS = get_setting_float("nilm_debounce", 10)
     nilm_engine.INVERTER_IDLE_LOAD = get_setting_float("inverter_idle_load", 70)
 
 
@@ -749,7 +748,7 @@ def init_db():
             conditions      TEXT
         )
     """)
-    # --- NILM tables (appliance detection) ---
+    # --- Load monitoring tables ---
     c.execute("""
         CREATE TABLE IF NOT EXISTS load_samples (
             timestamp    TEXT PRIMARY KEY,
@@ -759,51 +758,32 @@ def init_db():
             smoothed_total REAL
         )
     """)
+    # v1.5 migration: the old `load_events` schema (event_type, power_delta,
+    # signature_id, ...) was tied to the retired appliance-guessing engine.
+    # If we see it, rename to *_legacy and create the v1.5 schema fresh.
+    c.execute("PRAGMA table_info(load_events)")
+    existing_cols = [row[1] for row in c.fetchall()]
+    if existing_cols and "event_type" in existing_cols:
+        # Drop any prior legacy table from a half-completed migration
+        c.execute("DROP TABLE IF EXISTS load_events_legacy")
+        c.execute("ALTER TABLE load_events RENAME TO load_events_legacy")
+        print("NILM migration: renamed old load_events → load_events_legacy")
     c.execute("""
         CREATE TABLE IF NOT EXISTS load_events (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp    TEXT,
-            event_type   TEXT,
-            power_delta  REAL,
-            leg          TEXT,
-            duration     INTEGER,
-            signature_id INTEGER,
+            started_at   TEXT NOT NULL,
+            ended_at     TEXT,
+            power_w      REAL,
+            duration_s   INTEGER,
+            category     TEXT,
+            user_label   TEXT,
             confidence   REAL
         )
     """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS appliance_signatures (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            power_avg    REAL,
-            power_min    REAL,
-            power_max    REAL,
-            leg_pattern  TEXT,
-            event_count  INTEGER,
-            user_label   TEXT,
-            icon         TEXT,
-            color        TEXT,
-            is_active    INTEGER DEFAULT 0,
-            active_count INTEGER DEFAULT 0,
-            last_on_time TEXT,
-            avg_duration REAL DEFAULT 0,
-            daily_cycles REAL DEFAULT 0
-        )
-    """)
-    # Add active_count column if upgrading from older schema
-    try:
-        c.execute("ALTER TABLE appliance_signatures ADD COLUMN active_count INTEGER DEFAULT 0")
-    except Exception:
-        pass  # Column already exists
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS appliance_daily_stats (
-            date         TEXT,
-            signature_id INTEGER,
-            cycles       INTEGER,
-            total_duration INTEGER,
-            energy_kwh   REAL,
-            PRIMARY KEY (date, signature_id)
-        )
-    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_load_events_started_at ON load_events (started_at DESC)")
+    # Old appliance_signatures and appliance_daily_stats tables stay
+    # untouched if they exist — we just stop reading/writing them.
+    # A future cleanup release can drop them.
     # --- Settings table ---
     c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     # Seed defaults (won't overwrite existing values)
@@ -1029,8 +1009,7 @@ def on_message(client, userdata, message):
                 smoothed = nilm_engine.store_load_sample(DB_PATH, value, load_l1, load_l2)
                 event = nilm_engine.detect_edge(DB_PATH, smoothed, load_l1, load_l2)
                 if event:
-                    print(f"NILM: {event['label']} {event['event_type']} ({event['power_delta']}W)")
-                    socketio.emit("nilm_event", event)
+                    socketio.emit("load_event", event)
             except Exception as e:
                 print(f"NILM error: {e}")
 
@@ -1273,83 +1252,55 @@ def api_stats():
 
 
 # =====================================================
-#  NILM (Appliance Detection) API Routes
+#  Load Events API (v1.5)
 # =====================================================
+# Replaces the retired /api/nilm/* endpoints. Surfaces raw on/off events
+# (with categories, durations, and user labels) instead of guessed
+# appliance names. The 1Hz power-only signal can't reliably distinguish
+# a 1500W coffee maker from a 1500W heater — so we don't try.
 
-@app.route("/api/nilm/events")
-def api_nilm_events():
-    """Get recent appliance on/off events (last 24 hours)."""
-    events = nilm_engine.get_recent_events(DB_PATH, hours=24)
-    return jsonify(events)
+@app.route("/api/load-events")
+def api_load_events():
+    """Get recent load events (newest first). ?limit=50 default."""
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = max(1, min(500, limit))
+    events = nilm_engine.get_recent_events(DB_PATH, limit=limit)
+    breakdown = nilm_engine.get_today_category_breakdown(DB_PATH)
+    return jsonify({"events": events, "today_breakdown": breakdown})
 
 
-@app.route("/api/nilm/signatures")
-def api_nilm_signatures():
-    """Get all known appliance signatures."""
-    sigs = nilm_engine.get_all_signatures(DB_PATH)
-    return jsonify(sigs)
+@app.route("/api/load-events/<int:event_id>/label", methods=["POST"])
+def api_load_event_label(event_id):
+    """Set user_label on one event.
 
+    POST body:
+      { "label": "Coffee Maker",
+        "apply_to_ids": [12, 17, ...]   # optional bulk apply to similar events
+      }
 
-@app.route("/api/nilm/active")
-def api_nilm_active():
-    """Get currently active (on) appliances.
-
-    Passes the current inverter load so the engine can cross-check
-    and prune stale entries that don't match reality.
+    The frontend collects the candidate ids from a prior call to
+    /api/load-events/<id>/similar; this endpoint just bulk-writes them.
     """
-    current_load = latest_data.get("load_power")
-    active = nilm_engine.get_active_appliances(DB_PATH, current_load=current_load)
-    return jsonify(active)
+    data = request.get_json() or {}
+    label = (data.get("label") or "").strip() or None
+    ok = nilm_engine.label_event(DB_PATH, event_id, label)
+    if not ok:
+        return jsonify({"error": "Event not found"}), 404
+    bulk_ids = data.get("apply_to_ids") or []
+    bulk_changed = 0
+    if label and bulk_ids:
+        bulk_changed = nilm_engine.apply_label_to_events(DB_PATH, bulk_ids, label)
+    return jsonify({"ok": True, "bulk_changed": bulk_changed})
 
 
-@app.route("/api/nilm/signature/<int:sig_id>", methods=["PUT"])
-def api_nilm_update_signature(sig_id):
-    """Update a signature's label, icon, or color."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
-    nilm_engine.update_signature_label(
-        DB_PATH, sig_id,
-        label=data.get("label"),
-        icon=data.get("icon"),
-        color=data.get("color"),
-    )
-    return jsonify({"ok": True})
-
-
-@app.route("/api/nilm/signature/<int:keep_id>/merge", methods=["POST"])
-def api_nilm_merge_signature(keep_id):
-    """Merge another signature into this one."""
-    data = request.get_json()
-    if not data or "merge_id" not in data:
-        return jsonify({"error": "merge_id required"}), 400
-    ok = nilm_engine.merge_signatures(DB_PATH, keep_id, data["merge_id"])
-    if ok:
-        return jsonify({"ok": True})
-    return jsonify({"error": "Signature not found"}), 404
-
-
-@app.route("/api/nilm/daily/<int:sig_id>")
-def api_nilm_daily(sig_id):
-    """Get daily usage pattern for one appliance (last 30 days)."""
-    stats = nilm_engine.get_daily_stats(DB_PATH, sig_id, days=30)
-    return jsonify(stats)
-
-
-@app.route("/api/nilm/reanalyze", methods=["POST"])
-def api_nilm_reanalyze():
-    """Re-run edge detection on historical load data.
-
-    Pulls ~10 days of raw load power from Solar Assistant's InfluxDB
-    (~87k samples at 10-second intervals) and replays them through
-    the edge detector to discover appliance signatures.
-    """
-    # Try InfluxDB first (much more data), fall back to local samples
-    result = nilm_engine.reanalyze_from_influx(DB_PATH, sa_query)
-    if result.get("error"):
-        # Fallback to local samples if SA not available
-        result = nilm_engine.reanalyze(DB_PATH)
-    return jsonify(result)
+@app.route("/api/load-events/<int:event_id>/similar")
+def api_load_event_similar(event_id):
+    """Find unlabeled events with similar power magnitude (±15%)."""
+    similar = nilm_engine.find_similar_unlabeled(DB_PATH, event_id, tolerance_pct=0.15)
+    return jsonify(similar)
 
 
 # --- MQTT connection (supports reconnection) ---

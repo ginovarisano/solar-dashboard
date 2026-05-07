@@ -16,7 +16,7 @@ A real-time web dashboard for [Solar Assistant](https://solar-assistant.io/) use
 - **Energy history** — Daily, monthly, and yearly production/consumption tracking
 - **Weather integration** — Current conditions, forecast, sunshine hours, and solar production estimates (via Open-Meteo, no API key needed)
 - **Multi-inverter support** — Automatically detects and aggregates data from multiple inverters in parallel (e.g. 3x EG4-6000XP). No configuration needed — single-inverter setups work identically.
-- **Appliance detection (NILM)** — Automatically identifies appliances from your total load signal using edge detection. Learns and remembers signatures across reboots.
+- **Load events** — Detects when significant loads turn on/off and tracks their power and duration. Manual labeling lets you name what each event was; the dashboard can apply your label to similar past events with the same wattage on request.
 - **Fun stats** — All-time solar production with equivalents (CO2 saved, EV miles, iPhone charges, etc.)
 - **Customizable display** — Draggable cards, font size adjustments, and 12 color themes (lock/unlock the layout from the gear menu)
 - **Setup wizard** — First-run wizard walks you through configuration — no file editing needed
@@ -102,17 +102,31 @@ All settings are stored in a local SQLite database (`solar_history.db`, created 
 | Expected Max Solar Output (kW) | Your array's nameplate capacity. Used to scale the radial PV gauge (default: 10kW). Set this to your actual peak — e.g. 16 for a 16kW system — so the gauge reflects "how much of your potential are you producing right now". |
 | Battery Capacity (kWh) | Total usable battery capacity. Used for time-to-full / time-to-empty estimates. Set to 0 to auto-detect from observed swings. |
 
-### NILM (Appliance Detection) Settings
+### Load Events Settings
 
-The dashboard includes built-in appliance detection that identifies devices from your total load signal. These settings are tunable from the settings page:
+The dashboard logs when significant loads turn on and off, recording the
+power, duration, and a coarse category. It does **not** try to identify
+specific devices — see "A note on data limits" below for why.
 
 | Setting | Default | Description |
 |---|---|---|
-| Edge Threshold | 15W | Minimum power change to detect an on/off event |
-| Debounce | 8s | Cooldown between events to avoid false triggers |
-| Signature Tolerance | 25% | How closely a power change must match a known signature |
-| Smoothing Window | 3 | Number of samples to average for noise reduction |
-| Inverter Idle Load | 70W | Your inverter's baseline power draw (subtracted from detection) |
+| Edge Threshold | 30W | Minimum power change to count as an on/off event |
+| Debounce | 10s | Cooldown between events to avoid double-firing on noisy steps |
+| Inverter Idle Load | 70W | Your inverter's baseline draw (subtracted from detection) |
+
+#### A note on data limits
+
+NILM (Non-Intrusive Load Monitoring) with 1Hz, power-only data
+fundamentally can't reliably distinguish a 1500W coffee maker from a
+1500W heater — they look identical to us. The earlier "appliance
+detection" feature in this project tried to guess and was often wrong.
+We chose to surface raw events you can label rather than guess wrong.
+
+The category buckets (`heating`, `motor`, `resistive`, `electronics`)
+are inferred from event magnitude (and a weak inrush hint comparing the
+on/off step sizes). Treat them as a starting point — your `user_label`
+on each event is the source of truth, and the dashboard offers to apply
+your label to similar past events when you set one.
 
 ## MQTT Topics
 
@@ -137,7 +151,7 @@ python3 solar_listener.py 192.168.1.100 username password
 ```
 solar-dashboard/
   app.py               — Main Flask server (web routes, MQTT, weather, settings)
-  nilm_engine.py       — Appliance detection engine (edge detection, signature matching)
+  nilm_engine.py       — Load events engine (edge detection + categorization, no device guessing)
   solar_listener.py    — Standalone MQTT debug listener
   requirements.txt     — Python dependencies
   templates/
